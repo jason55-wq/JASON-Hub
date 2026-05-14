@@ -120,7 +120,7 @@ function renderProducts() {
   const grid = $("#productsGrid");
   grid.innerHTML = state.products
     .map((product) => {
-      const image = product.image_url || encodeURI("/image/1/圖片 43.PNG");
+      const image = product.image_url || "/static/vios.png";
       const disabled = product.stock <= 0 ? "disabled" : "";
       const buttonText = product.stock <= 0 ? "已售完" : "加入購物車";
       return `
