@@ -641,7 +641,7 @@ class App(BaseHTTPRequestHandler):
 
 def main():
     init_db()
-    host = "127.0.0.1"
+    host = "0.0.0.0"
     port = int(os.environ.get("PORT", "8013"))
     httpd = ThreadingHTTPServer((host, port), App)
     print(f"Studio shop running at http://{host}:{port}/")
