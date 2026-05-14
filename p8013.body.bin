@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>傑生工程工作室</title>
+    <title>Studio Member Shop</title>
     <link rel="stylesheet" href="/static/app.css">
   </head>
   <body>
@@ -11,7 +11,7 @@
       <a class="brand" href="#shop">
         <span class="brand-mark">S</span>
         <span>
-          <strong>傑生工程工作室</strong>
+          <strong>Studio Member Shop</strong>
           <small>會員制工作室商店</small>
         </span>
       </a>
@@ -34,9 +34,8 @@
         <div class="hero">
           <div class="hero-copy">
             <p class="eyebrow">Curated studio goods</p>
-            <p>傑生工程工作室專注於嵌入式系統、硬體整合與實作教學，提供從概念驗證到專案開發的完整支援。</p>
-            <h1>傑生工程工作室</h1>
-            <p>專注於 Arduino 相關專題介紹，從感測器應用、互動裝置到自動化控制，帶你一步步了解實作流程與核心概念。</p>
+            <h1>只給審核會員進入的工作室選物與課程商店</h1>
+            <p>從限量作品、工作坊套組到會員收藏品，所有商品都由後台上架並儲存在 SQLite 資料庫。</p>
           </div>
           <div class="hero-panel">
             <span>會員審核</span>
@@ -63,7 +62,6 @@
             <label>帳號或 Email<input name="username" autocomplete="username" required></label>
             <label>密碼<input name="password" type="password" autocomplete="current-password" required></label>
             <button class="primary">登入</button>
-            <p class="hint">預設管理員：admin / admin123</p>
           </form>
           <form id="registerForm" class="panel">
             <p class="eyebrow">Membership</p>
@@ -98,7 +96,7 @@
           <form id="productForm" class="panel">
             <input type="hidden" name="id">
             <p class="eyebrow">Product</p>
-            <h2 id="productFormTitle">編輯商品</h2>
+            <h2 id="productFormTitle">新建商品</h2>
             <label>商品名稱<input name="name" required></label>
             <label>分類<input name="category" value="Studio Goods"></label>
             <label>價格<input name="price" type="number" min="0" required></label>
@@ -116,8 +114,8 @@
               <label class="check"><input type="checkbox" name="featured"> 精選</label>
             </div>
             <div class="actions">
-              <button class="primary">更新商品</button>
-              <button type="button" id="resetProductBtn" class="ghost">重設</button>
+              <button class="primary">儲存商品</button>
+              <button type="button" id="resetProductBtn" class="ghost">清空</button>
             </div>
           </form>
 

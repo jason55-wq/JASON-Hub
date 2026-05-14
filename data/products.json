@@ -1,0 +1,32 @@
+[
+  {
+    "name": "ESP32 智慧環境監測套件",
+    "category": "嵌入式專案",
+    "description": "整合溫溼度、空氣品質與 OLED 顯示的入門專題範例，適合做課程展示或畢業製作雛形。",
+    "price": 1680,
+    "stock": 15,
+    "image_url": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=900&q=80",
+    "status": "active",
+    "featured": true
+  },
+  {
+    "name": "STM32 馬達控制開發板",
+    "category": "嵌入式專案",
+    "description": "適合練習 PWM、PID 與感測回授控制的實作板，能快速建立馬達控制與自動化原型。",
+    "price": 2480,
+    "stock": 8,
+    "image_url": "https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&fit=crop&w=900&q=80",
+    "status": "active",
+    "featured": true
+  },
+  {
+    "name": "Arduino 物聯網感測模組",
+    "category": "嵌入式專案",
+    "description": "把 Wi-Fi、感測器與雲端串接一次學會的模組範例，適合做智慧居家或遠端監控作品。",
+    "price": 980,
+    "stock": 20,
+    "image_url": "https://images.unsplash.com/photo-1581092921461-eab62e97a780?auto=format&fit=crop&w=900&q=80",
+    "status": "active",
+    "featured": false
+  }
+]

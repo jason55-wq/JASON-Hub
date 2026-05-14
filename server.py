@@ -7,13 +7,18 @@ import os
 import secrets
 import sqlite3
 import time
+import traceback
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "studio_shop.db")
+PRODUCTS_JSON_PATH = os.path.join(DATA_DIR, "products.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 SESSION_TTL = 60 * 60 * 24 * 7
+DEFAULT_ADMIN_USERNAME = "we252668"
+DEFAULT_ADMIN_PASSWORD = "edc25610731"
+DEFAULT_ADMIN_EMAIL = "we252668@studio.local"
 
 
 def db():
@@ -47,6 +52,67 @@ def public_user(row):
     user = dict(row)
     user.pop("password_hash", None)
     return user
+
+
+def load_seed_products():
+    if not os.path.exists(PRODUCTS_JSON_PATH):
+        return []
+    with open(PRODUCTS_JSON_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        raise ValueError("products.json must contain a list")
+    products = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        products.append(
+            (
+                item.get("name", "").strip(),
+                item.get("category", "Studio Goods").strip() or "Studio Goods",
+                item.get("description", "").strip(),
+                int(item.get("price", 0)),
+                int(item.get("stock", 0)),
+                item.get("image_url", "").strip(),
+                item.get("status", "draft"),
+                1 if item.get("featured") else 0,
+            )
+        )
+    return products
+
+
+def ensure_default_admin(con):
+    admin = con.execute(
+        """
+        SELECT id
+        FROM users
+        WHERE username = ? OR email = ? OR (role = 'admin' AND status = 'approved')
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_EMAIL),
+    ).fetchone()
+    values = (
+        DEFAULT_ADMIN_USERNAME,
+        DEFAULT_ADMIN_EMAIL,
+        hash_password(DEFAULT_ADMIN_PASSWORD),
+    )
+    if admin:
+        con.execute(
+            """
+            UPDATE users
+            SET username = ?, email = ?, password_hash = ?, role = 'admin', status = 'approved'
+            WHERE id = ?
+            """,
+            (*values, admin["id"]),
+        )
+    else:
+        con.execute(
+            """
+            INSERT INTO users (username, email, password_hash, role, status)
+            VALUES (?, ?, ?, 'admin', 'approved')
+            """,
+            values,
+        )
 
 
 def init_db():
@@ -108,69 +174,48 @@ def init_db():
             """
         )
 
-        if not con.execute("SELECT id FROM users WHERE username = ?", ("admin",)).fetchone():
-            con.execute(
-                """
-                INSERT INTO users (username, email, password_hash, role, status)
-                VALUES (?, ?, ?, 'admin', 'approved')
-                """,
-                ("admin", "admin@studio.local", hash_password("admin123")),
-            )
+        ensure_default_admin(con)
 
-        if con.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"] == 0:
-            samples = [
-                (
-                    "手作陶杯工作坊套組",
-                    "Workshop Kit",
-                    "含基礎陶杯胚、釉色試片與一次線上指導，適合新會員入門。",
-                    1280,
-                    12,
-                    "https://images.unsplash.com/photo-1493106819501-66d381c466f1?auto=format&fit=crop&w=900&q=80",
-                    "active",
-                    1,
-                ),
-                (
-                    "植栽香氛蠟燭",
-                    "Studio Goods",
-                    "小批量灌製，木質調與清草香，適合工作桌與展示空間。",
-                    680,
-                    24,
-                    "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=900&q=80",
-                    "active",
-                    1,
-                ),
-                (
-                    "會員限定掛畫",
-                    "Member Exclusive",
-                    "限量印刷與手工編號，審核通過會員才可下單收藏。",
-                    2200,
-                    6,
-                    "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=900&q=80",
-                    "active",
-                    0,
-                ),
-            ]
+        product_count = con.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
+        order_count = con.execute("SELECT COUNT(*) AS c FROM orders").fetchone()["c"]
+        order_item_count = con.execute("SELECT COUNT(*) AS c FROM order_items").fetchone()["c"]
+        seed_products = load_seed_products()
+        if seed_products and (product_count == 0 or (product_count == 3 and order_count == 0 and order_item_count == 0)):
+            con.execute("DELETE FROM products")
             con.executemany(
                 """
                 INSERT INTO products
                 (name, category, description, price, stock, image_url, status, featured)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                samples,
+                seed_products,
             )
 
 
 class App(BaseHTTPRequestHandler):
     server_version = "StudioShop/1.0"
+    protocol_version = "HTTP/1.1"
 
-    def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
-        super().end_headers()
+    def handle_one_request(self):
+        try:
+            return super().handle_one_request()
+        except Exception:
+            traceback.print_exc()
+            try:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(b'{"ok": false, "error": "Internal server error"}')))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(b'{"ok": false, "error": "Internal server error"}')
+            except Exception:
+                pass
+            return None
 
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/":
-            return self.serve_file(os.path.join(BASE_DIR, "index.html"), "text/html; charset=utf-8")
+            return self.serve_index()
         if parsed.path.startswith("/static/"):
             name = parsed.path.replace("/static/", "", 1)
             if ".." in name or name.startswith("/"):
@@ -212,8 +257,24 @@ class App(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(content)
+
+    def serve_index(self):
+        path = os.path.join(BASE_DIR, "index.html")
+        if os.path.exists(path):
+            try:
+                return self.serve_file(path, "text/html; charset=utf-8")
+            except Exception:
+                traceback.print_exc()
+        fallback = b"""<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Studio Member Shop</title></head><body><h1>Studio Member Shop</h1><p>Server is running.</p></body></html>"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(fallback)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(fallback)
 
     def read_json(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -229,6 +290,7 @@ class App(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(content)
 
@@ -340,11 +402,14 @@ class App(BaseHTTPRequestHandler):
                 (token, user["id"], int(time.time()) + SESSION_TTL),
             )
         cookie = f"studio_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_TTL}"
+        body = json.dumps({"ok": True, "user": public_user(user)}, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(json.dumps({"ok": True, "user": public_user(user)}, ensure_ascii=False).encode("utf-8"))
+        self.wfile.write(body)
 
     def logout(self):
         cookie = self.headers.get("Cookie", "")
@@ -355,11 +420,14 @@ class App(BaseHTTPRequestHandler):
         with db() as con:
             if token:
                 con.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        body = b'{"ok": true}'
         self.send_response(200)
         self.send_header("Set-Cookie", "studio_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(b'{"ok": true}')
+        self.wfile.write(body)
 
     def list_products(self, query):
         admin = query.get("admin", ["0"])[0] == "1"
@@ -558,7 +626,7 @@ class App(BaseHTTPRequestHandler):
 def main():
     init_db()
     host = "127.0.0.1"
-    port = int(os.environ.get("PORT", "8012"))
+    port = int(os.environ.get("PORT", "8013"))
     httpd = ThreadingHTTPServer((host, port), App)
     print(f"Studio shop running at http://{host}:{port}/")
     httpd.serve_forever()

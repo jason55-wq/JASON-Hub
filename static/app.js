@@ -304,20 +304,24 @@ async function saveProduct(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
-  data.featured = form.elements.featured.checked;
+  const id = data.id;
+  if (!id) {
+    notify("請先從右側清單選擇要編輯的商品");
+    return;
+  }
+  data.featured = Boolean(form.elements.featured.checked);
   data.price = Number(data.price);
   data.stock = Number(data.stock);
-  const id = data.id;
   delete data.id;
   try {
-    await api(id ? `/api/products/${id}` : "/api/products", {
-      method: id ? "PUT" : "POST",
+    await api(`/api/products/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     });
     resetProductForm();
     await loadAdmin();
     await loadProducts();
-    notify("商品已儲存");
+    notify("商品已更新");
   } catch (error) {
     notify(error.message);
   }
@@ -348,7 +352,7 @@ async function updateOrder(id, status) {
 function resetProductForm() {
   $("#productForm").reset();
   $("#productForm").elements.id.value = "";
-  $("#productFormTitle").textContent = "新建商品";
+  $("#productFormTitle").textContent = "選擇商品後編輯";
 }
 
 function escapeHtml(value) {

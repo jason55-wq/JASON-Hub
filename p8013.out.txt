@@ -1,0 +1,6 @@
+Studio shop running at http://127.0.0.1:8013/
+HANDLE ('127.0.0.1', 59870)
+HANDLE_ONE ''
+DO_GET /
+SERVE_INDEX
+HANDLE_ONE 'GET / HTTP/1.1'
