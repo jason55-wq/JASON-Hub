@@ -12,18 +12,18 @@
         <span class="brand-mark">J</span>
         <span>
           <strong>傑生工程工作室</strong>
-          <small>會員制工作室商城</small>
+          <small>工作室選品與訂單管理</small>
         </span>
       </a>
       <nav>
         <button data-view="shop">商店</button>
-        <button data-view="orders" class="auth-only">訂單狀態</button>
-        <button data-view="admin" class="admin-only">管理後台</button>
+        <button data-view="orders" class="auth-only">訂單記錄</button>
+        <button data-view="admin" class="admin-only">後台管理</button>
       </nav>
       <div class="account">
         <span id="userBadge"></span>
         <button id="logoutBtn" class="auth-only ghost">登出</button>
-        <button data-view="auth" class="guest-only">登入 / 申請</button>
+        <button data-view="auth" class="guest-only">登入 / 註冊</button>
       </div>
     </header>
 
@@ -33,21 +33,21 @@
       <section id="shopView" class="view active">
         <div class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">工作室精選</p>
-            <h1>從創作到實作，一站式工作室選品</h1>
-            <p>專注 Arduino 相關專題介紹，從感測器應用、互動裝置到自動化控制，帶你一步步了解實作流程與核心概念。</p>
+            <p class="eyebrow">工作室選品</p>
+            <h1>挑選生活與創作好物，讓每一次下單都更有質感。</h1>
+            <p>從實用工具到精選配件，我們提供簡潔、可靠、好上手的選品體驗，讓你快速找到適合自己的商品。</p>
           </div>
           <div class="hero-panel">
             <span>會員狀態</span>
             <strong id="heroStatus">登入後可下單</strong>
-            <small>管理員可以核准會員、管理商品，並追蹤訂單狀態。</small>
+            <small>登入並通過審核後，就可以開始下單與查看訂單。</small>
           </div>
         </div>
 
         <div class="section-title">
           <div>
-            <p class="eyebrow">商店</p>
-            <h2>可購買商品</h2>
+            <p class="eyebrow">商品</p>
+            <h2>最新上架</h2>
           </div>
           <button id="openCartBtn" class="primary">購物車 <span id="cartCount">0</span></button>
         </div>
@@ -64,13 +64,13 @@
             <button class="primary">登入</button>
           </form>
           <form id="registerForm" class="panel">
-            <p class="eyebrow">會員申請</p>
+            <p class="eyebrow">會員註冊</p>
             <h2>註冊帳號</h2>
             <label>帳號<input name="username" minlength="3" required></label>
             <label>Email<input name="email" type="email" required></label>
             <label>密碼<input name="password" type="password" minlength="6" required></label>
-            <button class="primary">送出審核</button>
-            <p class="hint">新帳號會先是待審核，需管理員核准後才能下單。</p>
+            <button class="primary">送出申請</button>
+            <p class="hint">註冊後需通過審核，才能登入並開始下單。</p>
           </form>
         </div>
       </section>
@@ -79,8 +79,8 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">訂單</p>
-            <h2>訂單狀態</h2>
-            <p class="hint">管理員更新後，這裡會顯示最新的訂單狀態。</p>
+            <h2>訂單記錄</h2>
+            <p class="hint">登入後可以查看自己的訂單狀態與金額。</p>
           </div>
         </div>
         <div id="ordersList" class="stack"></div>
@@ -90,7 +90,7 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">後台管理</p>
-            <h2>管理中心</h2>
+            <h2>管理總覽</h2>
           </div>
         </div>
         <div class="admin-layout">
@@ -101,8 +101,8 @@
               <div id="usersTable" class="table"></div>
             </div>
             <div class="panel">
-              <p class="eyebrow">出貨</p>
-              <h2>管理訂單狀態</h2>
+              <p class="eyebrow">訂單</p>
+              <h2>訂單管理</h2>
               <div id="adminOrders" class="table"></div>
             </div>
           </div>
@@ -122,7 +122,7 @@
           <label>電話<input name="phone" required></label>
           <label>地址<input name="address" required></label>
           <label>備註<textarea name="note" rows="3"></textarea></label>
-          <div class="total">合計 <strong id="cartTotal">NT$0</strong></div>
+          <div class="total">總計 <strong id="cartTotal">NT$0</strong></div>
           <button class="primary">送出訂單</button>
         </form>
       </div>

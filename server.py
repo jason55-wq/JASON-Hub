@@ -20,6 +20,7 @@ SESSION_TTL = 60 * 60 * 24 * 7
 DEFAULT_ADMIN_USERNAME = "123"
 DEFAULT_ADMIN_PASSWORD = "123"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
+ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 
 
 def db():
@@ -158,6 +159,7 @@ def init_db():
                 note TEXT NOT NULL DEFAULT '',
                 total INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'new',
+                review_status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -172,6 +174,13 @@ def init_db():
             );
             """
         )
+
+        order_columns = {
+            row["name"]
+            for row in con.execute("PRAGMA table_info(orders)").fetchall()
+        }
+        if "review_status" not in order_columns:
+            con.execute("ALTER TABLE orders ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'")
 
         ensure_default_admin(con)
 
@@ -412,6 +421,8 @@ class App(BaseHTTPRequestHandler):
                 return self.create_order()
             if path.startswith("/api/orders/") and method == "PUT":
                 return self.update_order(int(path.rsplit("/", 1)[1]))
+            if path.startswith("/api/orders/") and method == "DELETE":
+                return self.delete_order(int(path.rsplit("/", 1)[1]))
             return self.error(404, "API 不存在")
         except ValueError as exc:
             return self.error(400, str(exc))
@@ -587,9 +598,18 @@ class App(BaseHTTPRequestHandler):
             target = con.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
             if not target:
                 raise ValueError("找不到會員資料")
-            order_count = con.execute("SELECT COUNT(*) AS c FROM orders WHERE user_id = ?", (user_id,)).fetchone()["c"]
-            if order_count:
-                raise ValueError("此會員已有訂單，無法刪除")
+            pending_count = con.execute(
+                "SELECT COUNT(*) AS c FROM orders WHERE user_id = ? AND review_status = 'pending'",
+                (user_id,),
+            ).fetchone()["c"]
+            if pending_count:
+                raise ValueError("此會員仍有待審核訂單，無法刪除")
+            reviewed_orders = con.execute(
+                "SELECT id FROM orders WHERE user_id = ? AND review_status != 'pending'",
+                (user_id,),
+            ).fetchall()
+            for order in reviewed_orders:
+                self._delete_order_rows(con, order["id"])
             con.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return self.json({"ok": True})
 
@@ -655,8 +675,8 @@ class App(BaseHTTPRequestHandler):
 
             cur = con.execute(
                 """
-                INSERT INTO orders (user_id, customer_name, phone, address, note, total)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO orders (user_id, customer_name, phone, address, note, total, review_status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending')
                 """,
                 (user["id"], customer_name, phone, address, note, total),
             )
@@ -677,19 +697,52 @@ class App(BaseHTTPRequestHandler):
             return
         data = self.read_json()
         status = data.get("status")
-        if status not in {"new", "paid", "processing", "shipped", "completed", "cancelled"}:
+        review_status = data.get("review_status")
+        if status is not None and status not in {"new", "paid", "processing", "shipped", "completed", "cancelled"}:
             raise ValueError("訂單狀態不正確")
+        if review_status is not None and review_status not in ORDER_REVIEW_STATUSES:
+            raise ValueError("審核狀態不正確")
+        if status is None and review_status is None:
+            raise ValueError("請提供更新內容")
         with db() as con:
-            con.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+            if status is not None:
+                con.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+            if review_status is not None:
+                con.execute("UPDATE orders SET review_status = ? WHERE id = ?", (review_status, order_id))
+        return self.json({"ok": True})
+
+    def _delete_order_rows(self, con, order_id):
+        order = con.execute("SELECT id, review_status FROM orders WHERE id = ?", (order_id,)).fetchone()
+        if not order:
+            raise ValueError("找不到訂單資料")
+        if order["review_status"] == "pending":
+            raise ValueError("只有已審核的訂單可以刪除")
+        items = con.execute(
+            "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+            (order_id,),
+        ).fetchall()
+        for item in items:
+            con.execute(
+                "UPDATE products SET stock = stock + ? WHERE id = ?",
+                (item["quantity"], item["product_id"]),
+            )
+        con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+
+    def delete_order(self, order_id):
+        if not self.require_admin():
+            return
+        with db() as con:
+            self._delete_order_rows(con, order_id)
         return self.json({"ok": True})
 
 
 def main():
     init_db()
-    host = "0.0.0.0"
+    host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8013"))
     httpd = ThreadingHTTPServer((host, port), App)
-    print(f"Studio shop running at http://{host}:{port}/")
+    browser_host = "localhost" if host in {"0.0.0.0", "::"} else host
+    print(f"Studio shop running at http://{browser_host}:{port}/")
     httpd.serve_forever()
 
 
