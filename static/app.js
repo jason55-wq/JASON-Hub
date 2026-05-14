@@ -120,7 +120,7 @@ function renderProducts() {
   const grid = $("#productsGrid");
   grid.innerHTML = state.products
     .map((product) => {
-      const image = product.image_url || "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
+      const image = product.image_url || encodeURI("/image/1/圖片 43.PNG");
       const disabled = product.stock <= 0 ? "disabled" : "";
       const buttonText = product.stock <= 0 ? "已售完" : "加入購物車";
       return `

@@ -1,5 +1,5 @@
 ﻿from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
 import hashlib
 import hmac
 import json
@@ -216,7 +216,7 @@ class App(BaseHTTPRequestHandler):
         if parsed.path == "/":
             return self.serve_index()
         if parsed.path.startswith("/static/"):
-            name = parsed.path.replace("/static/", "", 1)
+            name = unquote(parsed.path.replace("/static/", "", 1))
             if ".." in name or name.startswith("/"):
                 return self.error(400, "路徑無效")
             path = os.path.join(STATIC_DIR, name)
@@ -225,6 +225,22 @@ class App(BaseHTTPRequestHandler):
                 content_type = "text/css; charset=utf-8"
             elif name.endswith(".js"):
                 content_type = "application/javascript; charset=utf-8"
+            return self.serve_file(path, content_type)
+        if parsed.path.startswith("/image/"):
+            name = unquote(parsed.path.replace("/image/", "", 1))
+            if ".." in name or name.startswith("/"):
+                return self.error(400, "路徑無效")
+            path = os.path.join(BASE_DIR, "image", name)
+            content_type = "application/octet-stream"
+            lowered = name.lower()
+            if lowered.endswith(".png"):
+                content_type = "image/png"
+            elif lowered.endswith((".jpg", ".jpeg")):
+                content_type = "image/jpeg"
+            elif lowered.endswith(".gif"):
+                content_type = "image/gif"
+            elif lowered.endswith(".webp"):
+                content_type = "image/webp"
             return self.serve_file(path, content_type)
         if parsed.path.startswith("/api/"):
             return self.handle_api("GET", parsed.path, parse_qs(parsed.query))
