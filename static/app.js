@@ -1,4 +1,4 @@
-﻿const state = {
+const state = {
   user: null,
   products: [],
   cart: loadCart(),
@@ -6,79 +6,56 @@
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-
 const DEFAULT_PRODUCT_IMAGE = window.DEFAULT_PRODUCT_IMAGE || "/static/vios.png";
-
-const USER_STATUS_LABELS = {
-  pending: "敺祟??,
-  approved: "撌脫??,
-  rejected: "撌脫?蝯?,
-};
-
-const ROLE_LABELS = {
-  member: "?",
-  admin: "蝞∠???,
-};
-
-const ORDER_STATUS_LABELS = {
-  new: "?啗???,
-  paid: "撌脖?甈?,
-  processing: "??銝?,
-  shipped: "撌脣鞎?,
-  completed: "撌脣???,
-  cancelled: "撌脣?瘨?,
-};
 
 function loadCart() {
   try {
-    const raw = localStorage.getItem("studio_cart");
-    return raw ? JSON.parse(raw) : [];
+    return JSON.parse(localStorage.getItem("studio_cart") || "[]");
   } catch {
     return [];
   }
+}
+
+function saveCart() {
+  localStorage.setItem("studio_cart", JSON.stringify(state.cart));
+  renderCart();
 }
 
 function money(value) {
   return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
     ...options,
   });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "?潛??芷????航炊");
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
   return data;
 }
 
 function notify(message) {
   const box = $("#notice");
+  if (!box) return;
   box.textContent = message;
   box.classList.remove("hidden");
   clearTimeout(notify.timer);
-  notify.timer = setTimeout(() => box.classList.add("hidden"), 3600);
-}
-
-function translateUserStatus(status) {
-  return USER_STATUS_LABELS[status] || status || "?芰";
-}
-
-function translateRole(role) {
-  return ROLE_LABELS[role] || role || "?芰";
-}
-
-function translateOrderStatus(status) {
-  return ORDER_STATUS_LABELS[status] || status || "?芰";
-}
-
-function getHeroStatus(user) {
-  if (!user) return "?餃敺銝";
-  if (user.status === "approved") return "?典歇??撖拇嚗隞乩???;
-  if (user.status === "pending") return "撣唾?撖拇銝哨???敺?臭???;
-  if (user.status === "rejected") return "撣唾?撌脰◤??嚗??舐窗蝞∠???;
-  return "撣唾???撣?;
+  notify.timer = setTimeout(() => box.classList.add("hidden"), 3500);
 }
 
 function showView(name) {
@@ -97,10 +74,20 @@ function syncChrome() {
   $$(".auth-only").forEach((el) => el.classList.toggle("hidden", !isAuthed));
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", !isAdmin));
 
-  $("#userBadge").textContent = state.user
-    ? `${state.user.username}嚚?{translateUserStatus(state.user.status)}嚚?{translateRole(state.user.role)}`
-    : "";
-  $("#heroStatus").textContent = getHeroStatus(state.user);
+  const badge = $("#userBadge");
+  if (badge) {
+    badge.textContent = state.user
+      ? `${state.user.username} · ${state.user.status || ""} · ${state.user.role || ""}`
+      : "";
+  }
+  const heroStatus = $("#heroStatus");
+  if (heroStatus) {
+    heroStatus.textContent = state.user
+      ? state.user.status === "approved"
+        ? "已登入並通過審核"
+        : "已登入，等待審核"
+      : "尚未登入";
+  }
 }
 
 async function loadMe() {
@@ -112,31 +99,38 @@ async function loadMe() {
 async function loadProducts(admin = false) {
   const data = await api(`/api/products${admin ? "?admin=1" : ""}`);
   if (!admin) {
-    state.products = data.products;
+    state.products = data.products || [];
     renderProducts();
   }
-  return data.products;
+  return data.products || [];
 }
 
 function renderProducts() {
   const grid = $("#productsGrid");
+  if (!grid) return;
+
+  if (!state.products.length) {
+    grid.innerHTML = `<p class="hint">目前沒有商品。</p>`;
+    return;
+  }
+
   grid.innerHTML = state.products
     .map((product) => {
       const image = product.image_url || DEFAULT_PRODUCT_IMAGE;
       const disabled = product.stock <= 0 ? "disabled" : "";
-      const buttonText = product.stock <= 0 ? "撌脣摰? : "?鞈潛頠?;
+      const buttonText = product.stock <= 0 ? "售完" : "加入購物車";
       return `
         <article class="product-card">
-          <img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}">
+          <img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" onerror="this.src='${escapeHtml(DEFAULT_PRODUCT_IMAGE)}'">
           <div class="product-body">
             <div class="product-meta">
-              <span class="tag">${escapeHtml(product.category)}</span>
+              <span class="tag">${escapeHtml(product.category || "商品")}</span>
               <span class="price">${money(product.price)}</span>
             </div>
             <h3>${escapeHtml(product.name)}</h3>
-            <p>${escapeHtml(product.description || "?怎???膩")}</p>
+            <p>${escapeHtml(product.description || "商品介紹")}</p>
             <div class="line">
-              <small>摨怠? ${product.stock}</small>
+              <small>庫存 ${Number(product.stock || 0)}</small>
               <button class="primary" ${disabled} onclick="addToCart(${product.id})">${buttonText}</button>
             </div>
           </div>
@@ -153,27 +147,40 @@ function addToCart(productId) {
   if (found) found.quantity += 1;
   else state.cart.push({ product_id: productId, quantity: 1 });
   saveCart();
-  notify("撌脣??亥頃?抵?");
+  notify("已加入購物車");
 }
 
-function saveCart() {
-  localStorage.setItem("studio_cart", JSON.stringify(state.cart));
-  renderCart();
+function changeQty(productId, delta) {
+  const item = state.cart.find((entry) => entry.product_id === productId);
+  if (!item) return;
+  item.quantity += delta;
+  if (item.quantity <= 0) {
+    state.cart = state.cart.filter((entry) => entry.product_id !== productId);
+  }
+  saveCart();
+}
+
+function removeFromCart(productId) {
+  state.cart = state.cart.filter((entry) => entry.product_id !== productId);
+  saveCart();
 }
 
 function renderCart() {
-  $("#cartCount").textContent = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-  const wrap = $("#cartItems");
-  let total = 0;
+  const count = $("#cartCount");
+  if (count) count.textContent = state.cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const wrap = $("#cartItems");
+  if (!wrap) return;
+
+  let total = 0;
   if (state.cart.length === 0) {
-    wrap.innerHTML = `<p class="hint">鞈潛頠??????/p>`;
+    wrap.innerHTML = `<p class="hint">購物車是空的。</p>`;
   } else {
     wrap.innerHTML = state.cart
       .map((item) => {
         const product = state.products.find((p) => p.id === item.product_id);
         if (!product) return "";
-        const subtotal = product.price * item.quantity;
+        const subtotal = Number(product.price || 0) * item.quantity;
         total += subtotal;
         return `
           <div class="cart-row">
@@ -185,7 +192,7 @@ function renderCart() {
             <div class="table-actions">
               <button type="button" onclick="changeQty(${product.id}, -1)">-</button>
               <button type="button" onclick="changeQty(${product.id}, 1)">+</button>
-              <button type="button" class="ghost" onclick="removeFromCart(${product.id})">蝘駁</button>
+              <button type="button" class="ghost" onclick="removeFromCart(${product.id})">刪除</button>
             </div>
           </div>
         `;
@@ -193,234 +200,180 @@ function renderCart() {
       .join("");
   }
 
-  $("#cartTotal").textContent = money(total);
-}
-
-function changeQty(productId, delta) {
-  const item = state.cart.find((entry) => entry.product_id === productId);
-  if (!item) return;
-  item.quantity += delta;
-  if (item.quantity <= 0) removeFromCart(productId);
-  else saveCart();
-}
-
-function removeFromCart(productId) {
-  state.cart = state.cart.filter((entry) => entry.product_id !== productId);
-  saveCart();
+  const totalBox = $("#cartTotal");
+  if (totalBox) totalBox.textContent = money(total);
 }
 
 async function checkout(event) {
   event.preventDefault();
 
   if (!state.user) {
-    notify("隢??餃銝阡?撖拇敺?銝");
+    notify("請先登入");
     return;
   }
   if (state.user.status !== "approved") {
-    notify("?桀?撣唾?撠??撖拇嚗?瘜???);
+    notify("帳號尚未通過審核");
     return;
   }
-  if (state.cart.length === 0) {
-    notify("鞈潛頠蝛箇?");
+  if (!state.cart.length) {
+    notify("請先加入商品");
     return;
   }
 
-  const form = event.currentTarget;
-  const payload = Object.fromEntries(new FormData(form));
-  payload.items = state.cart;
+  const form = new FormData(event.currentTarget);
+  const payload = {
+    items: state.cart,
+    customer_name: String(form.get("customer_name") || "").trim(),
+    phone: String(form.get("phone") || "").trim(),
+    address: String(form.get("address") || "").trim(),
+    note: String(form.get("note") || "").trim(),
+  };
 
   try {
-    const data = await api("/api/orders", { method: "POST", body: JSON.stringify(payload) });
+    await api("/api/orders", { method: "POST", body: JSON.stringify(payload) });
     state.cart = [];
     saveCart();
-    form.reset();
-    $("#cartDrawer").classList.remove("open");
-    await loadProducts();
-    notify(`閮撌脤嚗楊??#${data.order_id}`);
+    event.currentTarget.reset();
+    notify("訂單已送出");
   } catch (error) {
     notify(error.message);
   }
 }
 
 async function loadOrders() {
+  const wrap = $("#ordersList");
+  if (!wrap) return;
   try {
     const data = await api("/api/orders");
-    renderOrders(data.orders, $("#ordersList"), false);
+    const orders = data.orders || [];
+    wrap.innerHTML = orders.length
+      ? orders
+          .map(
+            (order) => `
+              <div class="panel order-card">
+                <strong>訂單 #${order.id}</strong>
+                <div class="hint">${escapeHtml(order.status || "")} · ${money(order.total)}</div>
+              </div>
+            `
+          )
+          .join("")
+      : `<p class="hint">目前沒有訂單。</p>`;
   } catch (error) {
-    $("#ordersList").innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
+    wrap.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
   }
-}
-
-function renderOrders(orders, target, admin) {
-  target.innerHTML = orders.length
-    ? orders
-        .map((order) => `
-          <article class="order-card panel">
-            <div class="line">
-              <strong>#${order.id}嚚?{escapeHtml(order.customer_name)}</strong>
-              <span class="tag">${escapeHtml(translateOrderStatus(order.status))}</span>
-            </div>
-            <p class="hint">${escapeHtml(order.address)}嚚?{escapeHtml(order.phone)}</p>
-            <div>
-              ${order.items
-                .map(
-                  (item) => `<div class="line"><span>${escapeHtml(item.product_name)} x ${item.quantity}</span><strong>${money(item.subtotal)}</strong></div>`,
-                )
-                .join("")}
-            </div>
-            <div class="line"><span>${escapeHtml(order.created_at)}</span><strong>${money(order.total)}</strong></div>
-            ${admin ? orderStatusControl(order) : ""}
-          </article>
-        `)
-        .join("")
-    : `<p class="hint">?桀??????柴?/p>`;
-}
-
-function orderStatusControl(order) {
-  const statuses = ["new", "paid", "processing", "shipped", "completed", "cancelled"];
-  return `
-    <div class="table-actions">
-      <select onchange="updateOrder(${order.id}, this.value)">
-        ${statuses
-          .map((status) => `<option value="${status}" ${status === order.status ? "selected" : ""}>${translateOrderStatus(status)}</option>`)
-          .join("")}
-      </select>
-    </div>
-  `;
 }
 
 async function loadAdmin() {
+  const usersWrap = $("#usersTable");
+  const ordersWrap = $("#adminOrders");
+  if (!usersWrap || !ordersWrap) return;
+
   try {
-    const [users, orders] = await Promise.all([
-      api("/api/users"),
-      api("/api/orders"),
-    ]);
-    renderUsers(users.users);
-    renderOrders(orders.orders, $("#adminOrders"), true);
+    const [usersRes, ordersRes] = await Promise.all([api("/api/users"), api("/api/orders")]);
+    const users = usersRes.users || [];
+    const orders = ordersRes.orders || [];
+
+    usersWrap.innerHTML = users.length
+      ? users
+          .map((user) => `<div class="table-row"><strong>${escapeHtml(user.username)}</strong><span>${escapeHtml(user.role || "")}</span></div>`)
+          .join("")
+      : `<p class="hint">沒有會員資料。</p>`;
+
+    ordersWrap.innerHTML = orders.length
+      ? orders
+          .map((order) => `<div class="table-row"><strong>#${order.id}</strong><span>${money(order.total)}</span></div>`)
+          .join("")
+      : `<p class="hint">沒有訂單資料。</p>`;
   } catch (error) {
-    notify(error.message);
+    usersWrap.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
+    ordersWrap.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
   }
-}
-
-function renderUsers(users) {
-  $("#usersTable").innerHTML = users
-    .map((user) => `
-      <div class="table-row">
-        <div class="line">
-          <strong>${escapeHtml(user.username)}</strong>
-          <span class="tag">${escapeHtml(translateUserStatus(user.status))}</span>
-        </div>
-        <small>${escapeHtml(user.email)}嚚?{escapeHtml(translateRole(user.role))}</small>
-        <div class="table-actions">
-          <select id="status-${user.id}">
-            ${["pending", "approved", "rejected"]
-              .map((status) => `<option value="${status}" ${status === user.status ? "selected" : ""}>${translateUserStatus(status)}</option>`)
-              .join("")}
-          </select>
-          <select id="role-${user.id}">
-            ${["member", "admin"]
-              .map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${translateRole(role)}</option>`)
-              .join("")}
-          </select>
-          <button onclick="saveUser(${user.id})">?脣?</button>
-          <button class="danger" data-username="${escapeHtml(user.username)}" onclick="deleteUser(${user.id}, this.dataset.username)">?芷</button>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-async function saveUser(id) {
-  try {
-    await api(`/api/users/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        status: $(`#status-${id}`).value,
-        role: $(`#role-${id}`).value,
-      }),
-    });
-    notify("?鞈?撌脫??);
-    loadAdmin();
-  } catch (error) {
-    notify(error.message);
-  }
-}
-
-async function deleteUser(id, username) {
-  if (!confirm(`蝣箏?閬?斗??～?{username}??嚗迨???⊥?敺拙??)) return;
-  try {
-    await api(`/api/users/${id}`, { method: "DELETE" });
-    notify("?鞈?撌脣??);
-    loadAdmin();
-  } catch (error) {
-    notify(error.message);
-  }
-}
-
-async function updateOrder(id, status) {
-  try {
-    await api(`/api/orders/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
-    notify("閮??歇?湔");
-    loadAdmin();
-  } catch (error) {
-    notify(error.message);
-  }
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function bindEvents() {
-  $$("[data-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
-  $("#openCartBtn").addEventListener("click", () => $("#cartDrawer").classList.add("open"));
-  $("#closeCartBtn").addEventListener("click", () => $("#cartDrawer").classList.remove("open"));
-  $("#checkoutForm").addEventListener("submit", checkout);
-  $("#logoutBtn").addEventListener("click", async () => {
-    await api("/api/logout", { method: "POST" });
-    state.user = null;
-    syncChrome();
-    showView("shop");
+  $$("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
   });
-  $("#loginForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const data = Object.fromEntries(new FormData(event.currentTarget));
-      const res = await api("/api/login", { method: "POST", body: JSON.stringify(data) });
-      state.user = res.user;
+
+  const openCartBtn = $("#openCartBtn");
+  const closeCartBtn = $("#closeCartBtn");
+  const cartDrawer = $("#cartDrawer");
+  if (openCartBtn && cartDrawer) {
+    openCartBtn.addEventListener("click", () => cartDrawer.classList.add("open"));
+  }
+  if (closeCartBtn && cartDrawer) {
+    closeCartBtn.addEventListener("click", () => cartDrawer.classList.remove("open"));
+  }
+
+  const checkoutForm = $("#checkoutForm");
+  if (checkoutForm) checkoutForm.addEventListener("submit", checkout);
+
+  const logoutBtn = $("#logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await api("/api/logout", { method: "POST" });
+      } catch {}
+      state.user = null;
       syncChrome();
       showView("shop");
-      notify("?餃??");
-    } catch (error) {
-      notify(error.message);
-    }
-  });
-  $("#registerForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    try {
-      const data = Object.fromEntries(new FormData(form));
-      const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
-      form.reset();
-      notify(res.message || "?唾???");
-    } catch (error) {
-      notify(error.message);
-    }
-  });
+    });
+  }
+
+  const loginForm = $("#loginForm");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = Object.fromEntries(new FormData(event.currentTarget));
+        const res = await api("/api/login", { method: "POST", body: JSON.stringify(data) });
+        state.user = res.user;
+        syncChrome();
+        showView("shop");
+        notify("登入成功");
+      } catch (error) {
+        notify(error.message);
+      }
+    });
+  }
+
+  const registerForm = $("#registerForm");
+  if (registerForm) {
+    registerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = Object.fromEntries(new FormData(event.currentTarget));
+        const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
+        event.currentTarget.reset();
+        notify(res.message || "申請成功");
+      } catch (error) {
+        notify(error.message);
+      }
+    });
+  }
 }
 
 async function init() {
   bindEvents();
-  await loadMe();
-  await loadProducts();
+  try {
+    await loadMe();
+  } catch {
+    state.user = null;
+    syncChrome();
+  }
+
+  try {
+    await loadProducts();
+  } catch (error) {
+    const grid = $("#productsGrid");
+    if (grid) grid.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
+  }
+
   renderCart();
 }
 
+window.addToCart = addToCart;
+window.changeQty = changeQty;
+window.removeFromCart = removeFromCart;
+
 init().catch((error) => notify(error.message));
-
-
-
