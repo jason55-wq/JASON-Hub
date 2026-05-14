@@ -1,4 +1,5 @@
-﻿from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+﻿import base64
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, unquote
 import hashlib
 import hmac
@@ -225,6 +226,14 @@ class App(BaseHTTPRequestHandler):
                 content_type = "text/css; charset=utf-8"
             elif name.endswith(".js"):
                 content_type = "application/javascript; charset=utf-8"
+            elif name.lower().endswith(".png"):
+                content_type = "image/png"
+            elif name.lower().endswith((".jpg", ".jpeg")):
+                content_type = "image/jpeg"
+            elif name.lower().endswith(".gif"):
+                content_type = "image/gif"
+            elif name.lower().endswith(".webp"):
+                content_type = "image/webp"
             return self.serve_file(path, content_type)
         if parsed.path.startswith("/image/"):
             name = unquote(parsed.path.replace("/image/", "", 1))
@@ -280,7 +289,28 @@ class App(BaseHTTPRequestHandler):
         path = os.path.join(BASE_DIR, "index.html")
         if os.path.exists(path):
             try:
-                return self.serve_file(path, "text/html; charset=utf-8")
+                with open(path, "r", encoding="utf-8") as f:
+                    html = f.read()
+                image_path = os.path.join(BASE_DIR, "static", "vios.png")
+                if os.path.exists(image_path):
+                    with open(image_path, "rb") as f:
+                        image_data = base64.b64encode(f.read()).decode("ascii")
+                    image_url = f"data:image/png;base64,{image_data}"
+                else:
+                    image_url = "data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='900' height='675'><rect width='100%25' height='100%25' fill='%23d8d2c8'/></svg>"
+                script = f"<script>window.DEFAULT_PRODUCT_IMAGE={json.dumps(image_url, ensure_ascii=False)};</script>"
+                if "</head>" in html:
+                    html = html.replace("</head>", f"{script}</head>", 1)
+                else:
+                    html = f"{script}{html}"
+                content = html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(content)
+                return
             except Exception:
                 traceback.print_exc()
         fallback = """<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>傑生工程工作室</title></head><body><h1>傑生工程工作室</h1><p>伺服器已啟動。</p></body></html>""".encode("utf-8")
@@ -290,7 +320,6 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(fallback)
-
     def read_json(self):
         length = int(self.headers.get("Content-Length", 0))
         if length == 0:
@@ -666,3 +695,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

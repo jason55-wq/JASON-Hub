@@ -1,4 +1,4 @@
-const state = {
+﻿const state = {
   user: null,
   products: [],
   cart: loadCart(),
@@ -7,24 +7,26 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
+const DEFAULT_PRODUCT_IMAGE = window.DEFAULT_PRODUCT_IMAGE || "/static/vios.png";
+
 const USER_STATUS_LABELS = {
-  pending: "待審核",
-  approved: "已核准",
-  rejected: "已拒絕",
+  pending: "敺祟??,
+  approved: "撌脫??,
+  rejected: "撌脫?蝯?,
 };
 
 const ROLE_LABELS = {
-  member: "會員",
-  admin: "管理員",
+  member: "?",
+  admin: "蝞∠???,
 };
 
 const ORDER_STATUS_LABELS = {
-  new: "新訂單",
-  paid: "已付款",
-  processing: "處理中",
-  shipped: "已出貨",
-  completed: "已完成",
-  cancelled: "已取消",
+  new: "?啗???,
+  paid: "撌脖?甈?,
+  processing: "??銝?,
+  shipped: "撌脣鞎?,
+  completed: "撌脣???,
+  cancelled: "撌脣?瘨?,
 };
 
 function loadCart() {
@@ -47,7 +49,7 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "發生未預期的錯誤");
+  if (!data.ok) throw new Error(data.error || "?潛??芷????航炊");
   return data;
 }
 
@@ -60,23 +62,23 @@ function notify(message) {
 }
 
 function translateUserStatus(status) {
-  return USER_STATUS_LABELS[status] || status || "未知";
+  return USER_STATUS_LABELS[status] || status || "?芰";
 }
 
 function translateRole(role) {
-  return ROLE_LABELS[role] || role || "未知";
+  return ROLE_LABELS[role] || role || "?芰";
 }
 
 function translateOrderStatus(status) {
-  return ORDER_STATUS_LABELS[status] || status || "未知";
+  return ORDER_STATUS_LABELS[status] || status || "?芰";
 }
 
 function getHeroStatus(user) {
-  if (!user) return "登入後可下單";
-  if (user.status === "approved") return "您已通過審核，可以下單";
-  if (user.status === "pending") return "帳號審核中，通過後即可下單";
-  if (user.status === "rejected") return "帳號已被拒絕，請聯絡管理員";
-  return "帳號狀態異常";
+  if (!user) return "?餃敺銝";
+  if (user.status === "approved") return "?典歇??撖拇嚗隞乩???;
+  if (user.status === "pending") return "撣唾?撖拇銝哨???敺?臭???;
+  if (user.status === "rejected") return "撣唾?撌脰◤??嚗??舐窗蝞∠???;
+  return "撣唾???撣?;
 }
 
 function showView(name) {
@@ -96,7 +98,7 @@ function syncChrome() {
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", !isAdmin));
 
   $("#userBadge").textContent = state.user
-    ? `${state.user.username}｜${translateUserStatus(state.user.status)}｜${translateRole(state.user.role)}`
+    ? `${state.user.username}嚚?{translateUserStatus(state.user.status)}嚚?{translateRole(state.user.role)}`
     : "";
   $("#heroStatus").textContent = getHeroStatus(state.user);
 }
@@ -120,9 +122,9 @@ function renderProducts() {
   const grid = $("#productsGrid");
   grid.innerHTML = state.products
     .map((product) => {
-      const image = product.image_url || "/static/vios.png";
+      const image = product.image_url || DEFAULT_PRODUCT_IMAGE;
       const disabled = product.stock <= 0 ? "disabled" : "";
-      const buttonText = product.stock <= 0 ? "已售完" : "加入購物車";
+      const buttonText = product.stock <= 0 ? "撌脣摰? : "?鞈潛頠?;
       return `
         <article class="product-card">
           <img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}">
@@ -132,9 +134,9 @@ function renderProducts() {
               <span class="price">${money(product.price)}</span>
             </div>
             <h3>${escapeHtml(product.name)}</h3>
-            <p>${escapeHtml(product.description || "暫無商品描述")}</p>
+            <p>${escapeHtml(product.description || "?怎???膩")}</p>
             <div class="line">
-              <small>庫存 ${product.stock}</small>
+              <small>摨怠? ${product.stock}</small>
               <button class="primary" ${disabled} onclick="addToCart(${product.id})">${buttonText}</button>
             </div>
           </div>
@@ -151,7 +153,7 @@ function addToCart(productId) {
   if (found) found.quantity += 1;
   else state.cart.push({ product_id: productId, quantity: 1 });
   saveCart();
-  notify("已加入購物車");
+  notify("撌脣??亥頃?抵?");
 }
 
 function saveCart() {
@@ -165,7 +167,7 @@ function renderCart() {
   let total = 0;
 
   if (state.cart.length === 0) {
-    wrap.innerHTML = `<p class="hint">購物車目前沒有商品。</p>`;
+    wrap.innerHTML = `<p class="hint">鞈潛頠??????/p>`;
   } else {
     wrap.innerHTML = state.cart
       .map((item) => {
@@ -183,7 +185,7 @@ function renderCart() {
             <div class="table-actions">
               <button type="button" onclick="changeQty(${product.id}, -1)">-</button>
               <button type="button" onclick="changeQty(${product.id}, 1)">+</button>
-              <button type="button" class="ghost" onclick="removeFromCart(${product.id})">移除</button>
+              <button type="button" class="ghost" onclick="removeFromCart(${product.id})">蝘駁</button>
             </div>
           </div>
         `;
@@ -211,15 +213,15 @@ async function checkout(event) {
   event.preventDefault();
 
   if (!state.user) {
-    notify("請先登入並通過審核後再下單");
+    notify("隢??餃銝阡?撖拇敺?銝");
     return;
   }
   if (state.user.status !== "approved") {
-    notify("目前帳號尚未通過審核，暫時無法下單");
+    notify("?桀?撣唾?撠??撖拇嚗?瘜???);
     return;
   }
   if (state.cart.length === 0) {
-    notify("購物車是空的");
+    notify("鞈潛頠蝛箇?");
     return;
   }
 
@@ -234,7 +236,7 @@ async function checkout(event) {
     form.reset();
     $("#cartDrawer").classList.remove("open");
     await loadProducts();
-    notify(`訂單已送出，編號：#${data.order_id}`);
+    notify(`閮撌脤嚗楊??#${data.order_id}`);
   } catch (error) {
     notify(error.message);
   }
@@ -255,10 +257,10 @@ function renderOrders(orders, target, admin) {
         .map((order) => `
           <article class="order-card panel">
             <div class="line">
-              <strong>#${order.id}｜${escapeHtml(order.customer_name)}</strong>
+              <strong>#${order.id}嚚?{escapeHtml(order.customer_name)}</strong>
               <span class="tag">${escapeHtml(translateOrderStatus(order.status))}</span>
             </div>
-            <p class="hint">${escapeHtml(order.address)}｜${escapeHtml(order.phone)}</p>
+            <p class="hint">${escapeHtml(order.address)}嚚?{escapeHtml(order.phone)}</p>
             <div>
               ${order.items
                 .map(
@@ -271,7 +273,7 @@ function renderOrders(orders, target, admin) {
           </article>
         `)
         .join("")
-    : `<p class="hint">目前還沒有訂單。</p>`;
+    : `<p class="hint">?桀??????柴?/p>`;
 }
 
 function orderStatusControl(order) {
@@ -308,7 +310,7 @@ function renderUsers(users) {
           <strong>${escapeHtml(user.username)}</strong>
           <span class="tag">${escapeHtml(translateUserStatus(user.status))}</span>
         </div>
-        <small>${escapeHtml(user.email)}｜${escapeHtml(translateRole(user.role))}</small>
+        <small>${escapeHtml(user.email)}嚚?{escapeHtml(translateRole(user.role))}</small>
         <div class="table-actions">
           <select id="status-${user.id}">
             ${["pending", "approved", "rejected"]
@@ -320,8 +322,8 @@ function renderUsers(users) {
               .map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${translateRole(role)}</option>`)
               .join("")}
           </select>
-          <button onclick="saveUser(${user.id})">儲存</button>
-          <button class="danger" data-username="${escapeHtml(user.username)}" onclick="deleteUser(${user.id}, this.dataset.username)">刪除</button>
+          <button onclick="saveUser(${user.id})">?脣?</button>
+          <button class="danger" data-username="${escapeHtml(user.username)}" onclick="deleteUser(${user.id}, this.dataset.username)">?芷</button>
         </div>
       </div>
     `)
@@ -337,7 +339,7 @@ async function saveUser(id) {
         role: $(`#role-${id}`).value,
       }),
     });
-    notify("會員資料已更新");
+    notify("?鞈?撌脫??);
     loadAdmin();
   } catch (error) {
     notify(error.message);
@@ -345,10 +347,10 @@ async function saveUser(id) {
 }
 
 async function deleteUser(id, username) {
-  if (!confirm(`確定要刪除會員「${username}」嗎？此操作無法復原。`)) return;
+  if (!confirm(`蝣箏?閬?斗??～?{username}??嚗迨???⊥?敺拙??)) return;
   try {
     await api(`/api/users/${id}`, { method: "DELETE" });
-    notify("會員資料已刪除");
+    notify("?鞈?撌脣??);
     loadAdmin();
   } catch (error) {
     notify(error.message);
@@ -358,7 +360,7 @@ async function deleteUser(id, username) {
 async function updateOrder(id, status) {
   try {
     await api(`/api/orders/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
-    notify("訂單狀態已更新");
+    notify("閮??歇?湔");
     loadAdmin();
   } catch (error) {
     notify(error.message);
@@ -392,7 +394,7 @@ function bindEvents() {
       state.user = res.user;
       syncChrome();
       showView("shop");
-      notify("登入成功");
+      notify("?餃??");
     } catch (error) {
       notify(error.message);
     }
@@ -404,7 +406,7 @@ function bindEvents() {
       const data = Object.fromEntries(new FormData(form));
       const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
       form.reset();
-      notify(res.message || "申請成功");
+      notify(res.message || "?唾???");
     } catch (error) {
       notify(error.message);
     }
@@ -419,3 +421,6 @@ async function init() {
 }
 
 init().catch((error) => notify(error.message));
+
+
+
