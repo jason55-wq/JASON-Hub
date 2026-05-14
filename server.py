@@ -1,4 +1,4 @@
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+﻿from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 import hashlib
 import hmac
@@ -15,10 +15,11 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "studio_shop.db")
 PRODUCTS_JSON_PATH = os.path.join(DATA_DIR, "products.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+IMAGE_DIR = os.path.join(BASE_DIR, "image")
 SESSION_TTL = 60 * 60 * 24 * 7
-DEFAULT_ADMIN_USERNAME = "we252668"
-DEFAULT_ADMIN_PASSWORD = "edc25610731"
-DEFAULT_ADMIN_EMAIL = "we252668@studio.local"
+DEFAULT_ADMIN_USERNAME = "123"
+DEFAULT_ADMIN_PASSWORD = "123"
+DEFAULT_ADMIN_EMAIL = "123@studio.local"
 
 
 def db():
@@ -68,7 +69,7 @@ def load_seed_products():
         products.append(
             (
                 item.get("name", "").strip(),
-                item.get("category", "Studio Goods").strip() or "Studio Goods",
+                item.get("category", "工作室選品").strip() or "工作室選品",
                 item.get("description", "").strip(),
                 int(item.get("price", 0)),
                 int(item.get("stock", 0)),
@@ -139,7 +140,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                category TEXT NOT NULL DEFAULT 'Studio Goods',
+                category TEXT NOT NULL DEFAULT '工作室選品',
                 description TEXT NOT NULL DEFAULT '',
                 price INTEGER NOT NULL,
                 stock INTEGER NOT NULL DEFAULT 0,
@@ -202,12 +203,13 @@ class App(BaseHTTPRequestHandler):
         except Exception:
             traceback.print_exc()
             try:
+                body = json.dumps({"ok": False, "error": "伺服器發生錯誤"}, ensure_ascii=False).encode("utf-8")
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", str(len(b'{"ok": false, "error": "Internal server error"}')))
+                self.send_header("Content-Length", str(len(body)))
                 self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(b'{"ok": false, "error": "Internal server error"}')
+                self.wfile.write(body)
             except Exception:
                 pass
             return None
@@ -219,7 +221,7 @@ class App(BaseHTTPRequestHandler):
         if parsed.path.startswith("/static/"):
             name = parsed.path.replace("/static/", "", 1)
             if ".." in name or name.startswith("/"):
-                return self.error(400, "Invalid path")
+                return self.error(400, "路徑無效")
             path = os.path.join(STATIC_DIR, name)
             content_type = "text/plain"
             if name.endswith(".css"):
@@ -227,31 +229,47 @@ class App(BaseHTTPRequestHandler):
             elif name.endswith(".js"):
                 content_type = "application/javascript; charset=utf-8"
             return self.serve_file(path, content_type)
+        if parsed.path.startswith("/image/"):
+            name = parsed.path.replace("/image/", "", 1)
+            if ".." in name or name.startswith("/"):
+                return self.error(400, "路徑無效")
+            path = os.path.join(IMAGE_DIR, name)
+            content_type = "application/octet-stream"
+            lower = name.lower()
+            if lower.endswith(".jpg") or lower.endswith(".jpeg"):
+                content_type = "image/jpeg"
+            elif lower.endswith(".png"):
+                content_type = "image/png"
+            elif lower.endswith(".gif"):
+                content_type = "image/gif"
+            elif lower.endswith(".webp"):
+                content_type = "image/webp"
+            return self.serve_file(path, content_type)
         if parsed.path.startswith("/api/"):
             return self.handle_api("GET", parsed.path, parse_qs(parsed.query))
-        return self.error(404, "Not found")
+        return self.error(404, "找不到資源")
 
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             return self.handle_api("POST", parsed.path, {})
-        return self.error(404, "Not found")
+        return self.error(404, "找不到資源")
 
     def do_PUT(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             return self.handle_api("PUT", parsed.path, {})
-        return self.error(404, "Not found")
+        return self.error(404, "找不到資源")
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             return self.handle_api("DELETE", parsed.path, {})
-        return self.error(404, "Not found")
+        return self.error(404, "找不到資源")
 
     def serve_file(self, path, content_type):
         if not os.path.exists(path):
-            return self.error(404, "Not found")
+            return self.error(404, "找不到資源")
         with open(path, "rb") as f:
             content = f.read()
         self.send_response(200)
@@ -268,7 +286,7 @@ class App(BaseHTTPRequestHandler):
                 return self.serve_file(path, "text/html; charset=utf-8")
             except Exception:
                 traceback.print_exc()
-        fallback = b"""<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Studio Member Shop</title></head><body><h1>Studio Member Shop</h1><p>Server is running.</p></body></html>"""
+        fallback = """<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>傑生工程工作室</title></head><body><h1>傑生工程工作室</h1><p>伺服器已啟動。</p></body></html>""".encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(fallback)))
@@ -386,7 +404,7 @@ class App(BaseHTTPRequestHandler):
                 "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
                 (username, email, hash_password(password)),
             )
-        return self.json({"ok": True, "message": "已送出會員申請，等待管理員審核"})
+        return self.json({"ok": True, "message": "申請成功"})
 
     def login(self):
         data = self.read_json()
@@ -489,7 +507,7 @@ class App(BaseHTTPRequestHandler):
     def product_payload(self):
         data = self.read_json()
         name = data.get("name", "").strip()
-        category = data.get("category", "Studio Goods").strip() or "Studio Goods"
+        category = data.get("category", "工作室選品").strip() or "工作室選品"
         description = data.get("description", "").strip()
         image_url = data.get("image_url", "").strip()
         status = data.get("status", "draft")

@@ -9,10 +9,10 @@
   <body>
     <header class="topbar">
       <a class="brand" href="#shop">
-        <span class="brand-mark">S</span>
+        <span class="brand-mark">J</span>
         <span>
           <strong>傑生工程工作室</strong>
-          <small>會員制工作室商店</small>
+          <small>會員制工作室商城</small>
         </span>
       </a>
       <nav>
@@ -33,22 +33,21 @@
       <section id="shopView" class="view active">
         <div class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">Curated studio goods</p>
-            <p>傑生工程工作室專注於嵌入式系統、硬體整合與實作教學，提供從概念驗證到專案開發的完整支援。</p>
-            <h1>傑生工程工作室</h1>
-            <p>專注於 Arduino 相關專題介紹，從感測器應用、互動裝置到自動化控制，帶你一步步了解實作流程與核心概念。</p>
+            <p class="eyebrow">工作室精選</p>
+            <h1>從創作到實作，一站式工作室選品</h1>
+            <p>專注 Arduino 相關專題介紹，從感測器應用、互動裝置到自動化控制，帶你一步步了解實作流程與核心概念。</p>
           </div>
           <div class="hero-panel">
-            <span>會員審核</span>
+            <span>會員狀態</span>
             <strong id="heroStatus">登入後可下單</strong>
-            <small>管理員可以核准會員、管理商品、追蹤訂單狀態。</small>
+            <small>管理員可以核准會員、管理商品，並追蹤訂單狀態。</small>
           </div>
         </div>
 
         <div class="section-title">
           <div>
-            <p class="eyebrow">Shop</p>
-            <h2>商品列表</h2>
+            <p class="eyebrow">商店</p>
+            <h2>可購買商品</h2>
           </div>
           <button id="openCartBtn" class="primary">購物車 <span id="cartCount">0</span></button>
         </div>
@@ -58,21 +57,21 @@
       <section id="authView" class="view">
         <div class="auth-grid">
           <form id="loginForm" class="panel">
-            <p class="eyebrow">Admin or member</p>
+            <p class="eyebrow">會員 / 管理員</p>
             <h2>登入</h2>
             <label>帳號或 Email<input name="username" autocomplete="username" required></label>
             <label>密碼<input name="password" type="password" autocomplete="current-password" required></label>
             <button class="primary">登入</button>
-            <p class="hint">預設管理員：admin / admin123</p>
+            <p class="hint">預設管理員：123 / 123</p>
           </form>
           <form id="registerForm" class="panel">
-            <p class="eyebrow">Membership</p>
-            <h2>申請會員</h2>
+            <p class="eyebrow">會員申請</p>
+            <h2>註冊帳號</h2>
             <label>帳號<input name="username" minlength="3" required></label>
             <label>Email<input name="email" type="email" required></label>
             <label>密碼<input name="password" type="password" minlength="6" required></label>
             <button class="primary">送出審核</button>
-            <p class="hint">新帳號會是 pending，需管理員核准後才能下單。</p>
+            <p class="hint">新帳號會先是待審核，需管理員核准後才能下單。</p>
           </form>
         </div>
       </section>
@@ -80,8 +79,8 @@
       <section id="ordersView" class="view">
         <div class="section-title">
           <div>
-            <p class="eyebrow">Orders</p>
-            <h2>訂單紀錄</h2>
+            <p class="eyebrow">訂單</p>
+            <h2>我的訂單</h2>
           </div>
         </div>
         <div id="ordersList" class="stack"></div>
@@ -90,20 +89,19 @@
       <section id="adminView" class="view">
         <div class="section-title">
           <div>
-            <p class="eyebrow">Back office</p>
-            <h2>管理後台</h2>
+            <p class="eyebrow">後台管理</p>
+            <h2>管理中心</h2>
           </div>
         </div>
         <div class="admin-layout">
           <form id="productForm" class="panel">
             <input type="hidden" name="id">
-            <p class="eyebrow">Product</p>
-            <h2 id="productFormTitle">編輯商品</h2>
+            <p class="eyebrow">商品</p>
+            <h2 id="productFormTitle">選擇商品後編輯</h2>
             <label>商品名稱<input name="name" required></label>
-            <label>分類<input name="category" value="Studio Goods"></label>
+            <label>分類<input name="category" value="工作室選品"></label>
             <label>價格<input name="price" type="number" min="0" required></label>
             <label>庫存<input name="stock" type="number" min="0" required></label>
-            <label>圖片網址<input name="image_url" placeholder="https://..."></label>
             <label>商品描述<textarea name="description" rows="4"></textarea></label>
             <div class="row">
               <label>狀態
@@ -116,24 +114,24 @@
               <label class="check"><input type="checkbox" name="featured"> 精選</label>
             </div>
             <div class="actions">
-              <button class="primary">更新商品</button>
+              <button class="primary">儲存商品</button>
               <button type="button" id="resetProductBtn" class="ghost">重設</button>
             </div>
           </form>
 
           <div class="stack">
             <div class="panel">
-              <p class="eyebrow">Members</p>
+              <p class="eyebrow">會員</p>
               <h2>會員審核</h2>
               <div id="usersTable" class="table"></div>
             </div>
             <div class="panel">
-              <p class="eyebrow">Products</p>
-              <h2>商品管理</h2>
+              <p class="eyebrow">商品</p>
+              <h2>商品清單</h2>
               <div id="adminProducts" class="table"></div>
             </div>
             <div class="panel">
-              <p class="eyebrow">Fulfillment</p>
+              <p class="eyebrow">出貨</p>
               <h2>訂單管理</h2>
               <div id="adminOrders" class="table"></div>
             </div>
@@ -154,7 +152,7 @@
           <label>電話<input name="phone" required></label>
           <label>地址<input name="address" required></label>
           <label>備註<textarea name="note" rows="3"></textarea></label>
-          <div class="total">合計 <strong id="cartTotal">$0</strong></div>
+          <div class="total">合計 <strong id="cartTotal">NT$0</strong></div>
           <button class="primary">送出訂單</button>
         </form>
       </div>

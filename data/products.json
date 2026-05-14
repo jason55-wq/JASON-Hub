@@ -1,32 +1,12 @@
 [
   {
-    "name": "ESP32 智慧環境監測套件",
-    "category": "嵌入式專案",
-    "description": "整合溫溼度、空氣品質與 OLED 顯示的入門專題範例，適合做課程展示或畢業製作雛形。",
+    "name": "DIY WIN10聲控電腦 VIOS",
+    "category": "VIOS",
+    "description": "DIY WIN10聲控電腦 VIOS\nhttps://www.youtube.com/shorts/FET2iD1qleQ\n\n改變Python 程式設計學習方式，先體驗工具製作開始、練習、輸出自己作品，到拍片自製轉換工具、下載C程式，精簡700行開源程式碼，都收錄於此教案中。\n\nVIOS就是這樣子一套學習系統---Python學習機，可以讓您從打造工具認識起，如果你是一個初學者，還有語音引導的部分，讓你順序學習，產生自己的學習節奏，殊途同功，最後達到自己的學習目的! 在生活應用上更方便，還可以遙控WIN10 動作，使用2次嘖嘖募資技術：\nhttps://www.zeczec.com/projects/talkingcat\nhttps://www.zeczec.com/projects/arduino\n\n新增 VIOS專業版~系統有3部分：\n1部份：入門基礎語音引導操作體驗、學習\n2部分：個別專題練習QA練習\n3部分：探索出口，例如輸出自己VGO語音作品\nhttps://www.youtube.com/shorts/FET2iD1qleQ\nhttp://vic8051.idv.tw/GVIO.htm\n\n打造更多基礎工具供初學者使用，使用者可以依自己操作習慣來做修改，節省大量操作時間，自然順利操作，這些工具有：語音輸入、語音回應輸出、MP3 檔案輸出、查看YOUTUBE點閱率、通訊界面連線、圖形界面開發、下載網頁圖形檔、一鍵控操作、遙控啟動、聲控連結、KTV應用，共20 種以上基礎功能模組，鍵盤都可以自己定義了。\n\n本系統使用python開源程式碼，DIY WIN10 聲控電腦的介面，簡單技術重新定義自己的鍵盤功能，突破自己學習上的瓶頸，成為自己學習程式設計、工作上的好夥伴，可持續進化的智慧AI PC。",
     "price": 1680,
     "stock": 15,
-    "image_url": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=900&q=80",
+    "image_url": "/image/1/messageImage_1777957604074.jpg",
     "status": "active",
     "featured": true
-  },
-  {
-    "name": "STM32 馬達控制開發板",
-    "category": "嵌入式專案",
-    "description": "適合練習 PWM、PID 與感測回授控制的實作板，能快速建立馬達控制與自動化原型。",
-    "price": 2480,
-    "stock": 8,
-    "image_url": "https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&fit=crop&w=900&q=80",
-    "status": "active",
-    "featured": true
-  },
-  {
-    "name": "Arduino 物聯網感測模組",
-    "category": "嵌入式專案",
-    "description": "把 Wi-Fi、感測器與雲端串接一次學會的模組範例，適合做智慧居家或遠端監控作品。",
-    "price": 980,
-    "stock": 20,
-    "image_url": "https://images.unsplash.com/photo-1581092921461-eab62e97a780?auto=format&fit=crop&w=900&q=80",
-    "status": "active",
-    "featured": false
   }
 ]

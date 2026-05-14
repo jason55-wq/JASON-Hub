@@ -2,14 +2,49 @@ const state = {
   user: null,
   products: [],
   adminProducts: [],
-  cart: JSON.parse(localStorage.getItem("studio_cart") || "[]"),
+  cart: loadCart(),
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
+const USER_STATUS_LABELS = {
+  pending: "待審核",
+  approved: "已核准",
+  rejected: "已拒絕",
+};
+
+const ROLE_LABELS = {
+  member: "會員",
+  admin: "管理員",
+};
+
+const PRODUCT_STATUS_LABELS = {
+  draft: "草稿",
+  active: "上架",
+  archived: "封存",
+};
+
+const ORDER_STATUS_LABELS = {
+  new: "新訂單",
+  paid: "已付款",
+  processing: "處理中",
+  shipped: "已出貨",
+  completed: "已完成",
+  cancelled: "已取消",
+};
+
+function loadCart() {
+  try {
+    const raw = localStorage.getItem("studio_cart");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 function money(value) {
-  return `$${Number(value || 0).toLocaleString("zh-TW")}`;
+  return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
 }
 
 async function api(path, options = {}) {
@@ -19,7 +54,7 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "操作失敗");
+  if (!data.ok) throw new Error(data.error || "發生未預期的錯誤");
   return data;
 }
 
@@ -31,9 +66,34 @@ function notify(message) {
   notify.timer = setTimeout(() => box.classList.add("hidden"), 3600);
 }
 
+function translateUserStatus(status) {
+  return USER_STATUS_LABELS[status] || status || "未知";
+}
+
+function translateRole(role) {
+  return ROLE_LABELS[role] || role || "未知";
+}
+
+function translateProductStatus(status) {
+  return PRODUCT_STATUS_LABELS[status] || status || "未知";
+}
+
+function translateOrderStatus(status) {
+  return ORDER_STATUS_LABELS[status] || status || "未知";
+}
+
+function getHeroStatus(user) {
+  if (!user) return "登入後可下單";
+  if (user.status === "approved") return "您已通過審核，可以下單";
+  if (user.status === "pending") return "帳號審核中，通過後即可下單";
+  if (user.status === "rejected") return "帳號已被拒絕，請聯絡管理員";
+  return "帳號狀態異常";
+}
+
 function showView(name) {
   $$(".view").forEach((view) => view.classList.remove("active"));
-  $(`#${name}View`).classList.add("active");
+  const target = $(`#${name}View`);
+  if (target) target.classList.add("active");
   if (name === "orders") loadOrders();
   if (name === "admin") loadAdmin();
 }
@@ -41,13 +101,15 @@ function showView(name) {
 function syncChrome() {
   const isAuthed = Boolean(state.user);
   const isAdmin = state.user?.role === "admin" && state.user?.status === "approved";
+
   $$(".guest-only").forEach((el) => el.classList.toggle("hidden", isAuthed));
   $$(".auth-only").forEach((el) => el.classList.toggle("hidden", !isAuthed));
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", !isAdmin));
+
   $("#userBadge").textContent = state.user
-    ? `${state.user.username} · ${state.user.status}${state.user.role === "admin" ? " · admin" : ""}`
+    ? `${state.user.username}｜${translateUserStatus(state.user.status)}｜${translateRole(state.user.role)}`
     : "";
-  $("#heroStatus").textContent = state.user?.status === "approved" ? "會員可下單" : "登入後可下單";
+  $("#heroStatus").textContent = getHeroStatus(state.user);
 }
 
 async function loadMe() {
@@ -71,6 +133,7 @@ function renderProducts() {
     .map((product) => {
       const image = product.image_url || "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
       const disabled = product.stock <= 0 ? "disabled" : "";
+      const buttonText = product.stock <= 0 ? "已售完" : "加入購物車";
       return `
         <article class="product-card">
           <img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}">
@@ -80,10 +143,10 @@ function renderProducts() {
               <span class="price">${money(product.price)}</span>
             </div>
             <h3>${escapeHtml(product.name)}</h3>
-            <p>${escapeHtml(product.description || "工作室精選商品。")}</p>
+            <p>${escapeHtml(product.description || "暫無商品描述")}</p>
             <div class="line">
               <small>庫存 ${product.stock}</small>
-              <button class="primary" ${disabled} onclick="addToCart(${product.id})">加入購物車</button>
+              <button class="primary" ${disabled} onclick="addToCart(${product.id})">${buttonText}</button>
             </div>
           </div>
         </article>
@@ -94,7 +157,7 @@ function renderProducts() {
 
 function addToCart(productId) {
   const product = state.products.find((item) => item.id === productId);
-  if (!product) return;
+  if (!product || product.stock <= 0) return;
   const found = state.cart.find((item) => item.product_id === productId);
   if (found) found.quantity += 1;
   else state.cart.push({ product_id: productId, quantity: 1 });
@@ -111,8 +174,9 @@ function renderCart() {
   $("#cartCount").textContent = state.cart.reduce((sum, item) => sum + item.quantity, 0);
   const wrap = $("#cartItems");
   let total = 0;
+
   if (state.cart.length === 0) {
-    wrap.innerHTML = `<p class="hint">購物車目前是空的。</p>`;
+    wrap.innerHTML = `<p class="hint">購物車目前沒有商品。</p>`;
   } else {
     wrap.innerHTML = state.cart
       .map((item) => {
@@ -137,6 +201,7 @@ function renderCart() {
       })
       .join("");
   }
+
   $("#cartTotal").textContent = money(total);
 }
 
@@ -155,10 +220,24 @@ function removeFromCart(productId) {
 
 async function checkout(event) {
   event.preventDefault();
-  if (!state.user) return notify("請先登入，並等待會員審核通過");
+
+  if (!state.user) {
+    notify("請先登入並通過審核後再下單");
+    return;
+  }
+  if (state.user.status !== "approved") {
+    notify("目前帳號尚未通過審核，暫時無法下單");
+    return;
+  }
+  if (state.cart.length === 0) {
+    notify("購物車是空的");
+    return;
+  }
+
   const form = event.currentTarget;
   const payload = Object.fromEntries(new FormData(form));
   payload.items = state.cart;
+
   try {
     const data = await api("/api/orders", { method: "POST", body: JSON.stringify(payload) });
     state.cart = [];
@@ -166,7 +245,7 @@ async function checkout(event) {
     form.reset();
     $("#cartDrawer").classList.remove("open");
     await loadProducts();
-    notify(`訂單已建立：#${data.order_id}`);
+    notify(`訂單已送出，編號：#${data.order_id}`);
   } catch (error) {
     notify(error.message);
   }
@@ -187,17 +266,23 @@ function renderOrders(orders, target, admin) {
         .map((order) => `
           <article class="order-card panel">
             <div class="line">
-              <strong>#${order.id} · ${escapeHtml(order.customer_name)}</strong>
-              <span class="tag">${escapeHtml(order.status)}</span>
+              <strong>#${order.id}｜${escapeHtml(order.customer_name)}</strong>
+              <span class="tag">${escapeHtml(translateOrderStatus(order.status))}</span>
             </div>
-            <p class="hint">${escapeHtml(order.address)} · ${escapeHtml(order.phone)}</p>
-            <div>${order.items.map((item) => `<div class="line"><span>${escapeHtml(item.product_name)} x ${item.quantity}</span><strong>${money(item.subtotal)}</strong></div>`).join("")}</div>
+            <p class="hint">${escapeHtml(order.address)}｜${escapeHtml(order.phone)}</p>
+            <div>
+              ${order.items
+                .map(
+                  (item) => `<div class="line"><span>${escapeHtml(item.product_name)} x ${item.quantity}</span><strong>${money(item.subtotal)}</strong></div>`,
+                )
+                .join("")}
+            </div>
             <div class="line"><span>${escapeHtml(order.created_at)}</span><strong>${money(order.total)}</strong></div>
             ${admin ? orderStatusControl(order) : ""}
           </article>
         `)
         .join("")
-    : `<p class="hint">目前沒有訂單。</p>`;
+    : `<p class="hint">目前還沒有訂單。</p>`;
 }
 
 function orderStatusControl(order) {
@@ -205,7 +290,9 @@ function orderStatusControl(order) {
   return `
     <div class="table-actions">
       <select onchange="updateOrder(${order.id}, this.value)">
-        ${statuses.map((status) => `<option value="${status}" ${status === order.status ? "selected" : ""}>${status}</option>`).join("")}
+        ${statuses
+          .map((status) => `<option value="${status}" ${status === order.status ? "selected" : ""}>${translateOrderStatus(status)}</option>`)
+          .join("")}
       </select>
     </div>
   `;
@@ -232,15 +319,19 @@ function renderUsers(users) {
       <div class="table-row">
         <div class="line">
           <strong>${escapeHtml(user.username)}</strong>
-          <span class="tag">${escapeHtml(user.status)}</span>
+          <span class="tag">${escapeHtml(translateUserStatus(user.status))}</span>
         </div>
-        <small>${escapeHtml(user.email)} · ${escapeHtml(user.role)}</small>
+        <small>${escapeHtml(user.email)}｜${escapeHtml(translateRole(user.role))}</small>
         <div class="table-actions">
           <select id="status-${user.id}">
-            ${["pending", "approved", "rejected"].map((status) => `<option value="${status}" ${status === user.status ? "selected" : ""}>${status}</option>`).join("")}
+            ${["pending", "approved", "rejected"]
+              .map((status) => `<option value="${status}" ${status === user.status ? "selected" : ""}>${translateUserStatus(status)}</option>`)
+              .join("")}
           </select>
           <select id="role-${user.id}">
-            ${["member", "admin"].map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${role}</option>`).join("")}
+            ${["member", "admin"]
+              .map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${translateRole(role)}</option>`)
+              .join("")}
           </select>
           <button onclick="saveUser(${user.id})">儲存</button>
         </div>
@@ -258,7 +349,7 @@ async function saveUser(id) {
         role: $(`#role-${id}`).value,
       }),
     });
-    notify("會員已更新");
+    notify("會員資料已更新");
     loadAdmin();
   } catch (error) {
     notify(error.message);
@@ -274,7 +365,7 @@ function renderAdminProducts(products) {
           <strong>${escapeHtml(product.name)}</strong>
           <span class="price">${money(product.price)}</span>
         </div>
-        <small>${escapeHtml(product.category)} · ${escapeHtml(product.status)} · 庫存 ${product.stock}</small>
+        <small>${escapeHtml(product.category)}｜${escapeHtml(translateProductStatus(product.status))}｜庫存 ${product.stock}</small>
         <div class="table-actions">
           <button onclick="editProductById(${product.id})">編輯</button>
           <button class="ghost" onclick="deleteProduct(${product.id})">刪除</button>
@@ -305,14 +396,19 @@ async function saveProduct(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const id = data.id;
+
   if (!id) {
     notify("請先從右側清單選擇要編輯的商品");
     return;
   }
+
+  const existingProduct = state.adminProducts.find((item) => String(item.id) === String(id));
+  if (existingProduct) data.image_url = existingProduct.image_url || "";
   data.featured = Boolean(form.elements.featured.checked);
   data.price = Number(data.price);
   data.stock = Number(data.stock);
   delete data.id;
+
   try {
     await api(`/api/products/${id}`, {
       method: "PUT",
@@ -391,11 +487,12 @@ function bindEvents() {
   });
   $("#registerForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     try {
-      const data = Object.fromEntries(new FormData(event.currentTarget));
+      const data = Object.fromEntries(new FormData(form));
       const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
-      event.currentTarget.reset();
-      notify(res.message);
+      form.reset();
+      notify(res.message || "申請成功");
     } catch (error) {
       notify(error.message);
     }
