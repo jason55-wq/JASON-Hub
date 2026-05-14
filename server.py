@@ -203,6 +203,7 @@ def init_db():
 class App(BaseHTTPRequestHandler):
     server_version = "StudioShop/1.0"
     protocol_version = "HTTP/1.1"
+    _suppress_body = False
 
     def handle_one_request(self):
         try:
@@ -216,10 +217,14 @@ class App(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(body)
+                self.write_body(body)
             except Exception:
                 pass
             return None
+
+    def write_body(self, content):
+        if not self._suppress_body and content:
+            self.wfile.write(content)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -264,6 +269,13 @@ class App(BaseHTTPRequestHandler):
             return self.handle_api("GET", parsed.path, parse_qs(parsed.query))
         return self.error(404, "找不到資源")
 
+    def do_HEAD(self):
+        self._suppress_body = True
+        try:
+            return self.do_GET()
+        finally:
+            self._suppress_body = False
+
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
@@ -292,7 +304,7 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(content)
+        self.write_body(content)
 
     def serve_index(self):
         path = os.path.join(BASE_DIR, "index.html")
@@ -318,7 +330,7 @@ class App(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(content)))
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
-                self.wfile.write(content)
+                self.write_body(content)
                 return
             except Exception:
                 traceback.print_exc()
@@ -328,7 +340,7 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(fallback)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(fallback)
+        self.write_body(fallback)
     def read_json(self):
         length = int(self.headers.get("Content-Length", 0))
         if length == 0:
@@ -345,7 +357,7 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(content)
+        self.write_body(content)
 
     def error(self, status, message):
         return self.json({"ok": False, "error": message}, status)
@@ -466,7 +478,7 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        self.write_body(body)
 
     def logout(self):
         cookie = self.headers.get("Cookie", "")
@@ -484,7 +496,7 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        self.write_body(body)
 
     def list_products(self, query):
         admin = query.get("admin", ["0"])[0] == "1"
@@ -738,7 +750,7 @@ class App(BaseHTTPRequestHandler):
 
 def main():
     init_db()
-    host = os.environ.get("HOST", "127.0.0.1")
+    host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8013"))
     httpd = ThreadingHTTPServer((host, port), App)
     browser_host = "localhost" if host in {"0.0.0.0", "::"} else host
