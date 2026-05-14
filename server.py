@@ -15,7 +15,6 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "studio_shop.db")
 PRODUCTS_JSON_PATH = os.path.join(DATA_DIR, "products.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-IMAGE_DIR = os.path.join(BASE_DIR, "image")
 SESSION_TTL = 60 * 60 * 24 * 7
 DEFAULT_ADMIN_USERNAME = "123"
 DEFAULT_ADMIN_PASSWORD = "123"
@@ -73,7 +72,6 @@ def load_seed_products():
                 item.get("description", "").strip(),
                 int(item.get("price", 0)),
                 int(item.get("stock", 0)),
-                item.get("image_url", "").strip(),
                 item.get("status", "draft"),
                 1 if item.get("featured") else 0,
             )
@@ -144,7 +142,6 @@ def init_db():
                 description TEXT NOT NULL DEFAULT '',
                 price INTEGER NOT NULL,
                 stock INTEGER NOT NULL DEFAULT 0,
-                image_url TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'draft',
                 featured INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -186,8 +183,8 @@ def init_db():
             con.executemany(
                 """
                 INSERT INTO products
-                (name, category, description, price, stock, image_url, status, featured)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (name, category, description, price, stock, status, featured)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 seed_products,
             )
@@ -228,22 +225,6 @@ class App(BaseHTTPRequestHandler):
                 content_type = "text/css; charset=utf-8"
             elif name.endswith(".js"):
                 content_type = "application/javascript; charset=utf-8"
-            return self.serve_file(path, content_type)
-        if parsed.path.startswith("/image/"):
-            name = parsed.path.replace("/image/", "", 1)
-            if ".." in name or name.startswith("/"):
-                return self.error(400, "路徑無效")
-            path = os.path.join(IMAGE_DIR, name)
-            content_type = "application/octet-stream"
-            lower = name.lower()
-            if lower.endswith(".jpg") or lower.endswith(".jpeg"):
-                content_type = "image/jpeg"
-            elif lower.endswith(".png"):
-                content_type = "image/png"
-            elif lower.endswith(".gif"):
-                content_type = "image/gif"
-            elif lower.endswith(".webp"):
-                content_type = "image/webp"
             return self.serve_file(path, content_type)
         if parsed.path.startswith("/api/"):
             return self.handle_api("GET", parsed.path, parse_qs(parsed.query))
@@ -378,6 +359,8 @@ class App(BaseHTTPRequestHandler):
                 return self.list_users()
             if path.startswith("/api/users/") and method == "PUT":
                 return self.update_user(int(path.rsplit("/", 1)[1]))
+            if path.startswith("/api/users/") and method == "DELETE":
+                return self.delete_user(int(path.rsplit("/", 1)[1]))
             if path == "/api/orders" and method == "GET":
                 return self.list_orders()
             if path == "/api/orders" and method == "POST":
@@ -467,8 +450,8 @@ class App(BaseHTTPRequestHandler):
         with db() as con:
             cur = con.execute(
                 """
-                INSERT INTO products (name, category, description, price, stock, image_url, status, featured)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, category, description, price, stock, status, featured)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 data,
             )
@@ -482,7 +465,7 @@ class App(BaseHTTPRequestHandler):
             con.execute(
                 """
                 UPDATE products
-                SET name = ?, category = ?, description = ?, price = ?, stock = ?, image_url = ?,
+                SET name = ?, category = ?, description = ?, price = ?, stock = ?,
                     status = ?, featured = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -509,7 +492,6 @@ class App(BaseHTTPRequestHandler):
         name = data.get("name", "").strip()
         category = data.get("category", "工作室選品").strip() or "工作室選品"
         description = data.get("description", "").strip()
-        image_url = data.get("image_url", "").strip()
         status = data.get("status", "draft")
         if status not in {"draft", "active", "archived"}:
             raise ValueError("商品狀態不正確")
@@ -521,7 +503,7 @@ class App(BaseHTTPRequestHandler):
             raise ValueError("價格與庫存需為數字")
         if not name or price < 0 or stock < 0:
             raise ValueError("請輸入商品名稱，價格與庫存不可小於 0")
-        return (name, category, description, price, stock, image_url, status, featured)
+        return (name, category, description, price, stock, status, featured)
 
     def list_users(self):
         if not self.require_admin():
@@ -548,6 +530,22 @@ class App(BaseHTTPRequestHandler):
             raise ValueError("不能移除目前登入管理員的管理權限")
         with db() as con:
             con.execute("UPDATE users SET status = ?, role = ? WHERE id = ?", (status, role, user_id))
+        return self.json({"ok": True})
+
+    def delete_user(self, user_id):
+        admin = self.require_admin()
+        if not admin:
+            return
+        if user_id == admin["id"]:
+            raise ValueError("不能刪除目前登入的管理員帳號")
+        with db() as con:
+            target = con.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not target:
+                raise ValueError("找不到會員資料")
+            order_count = con.execute("SELECT COUNT(*) AS c FROM orders WHERE user_id = ?", (user_id,)).fetchone()["c"]
+            if order_count:
+                raise ValueError("此會員已有訂單，無法刪除")
+            con.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return self.json({"ok": True})
 
     def list_orders(self):

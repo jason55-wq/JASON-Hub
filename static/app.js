@@ -1,7 +1,6 @@
 const state = {
   user: null,
   products: [],
-  adminProducts: [],
   cart: loadCart(),
 };
 
@@ -17,12 +16,6 @@ const USER_STATUS_LABELS = {
 const ROLE_LABELS = {
   member: "會員",
   admin: "管理員",
-};
-
-const PRODUCT_STATUS_LABELS = {
-  draft: "草稿",
-  active: "上架",
-  archived: "封存",
 };
 
 const ORDER_STATUS_LABELS = {
@@ -72,10 +65,6 @@ function translateUserStatus(status) {
 
 function translateRole(role) {
   return ROLE_LABELS[role] || role || "未知";
-}
-
-function translateProductStatus(status) {
-  return PRODUCT_STATUS_LABELS[status] || status || "未知";
 }
 
 function translateOrderStatus(status) {
@@ -300,13 +289,11 @@ function orderStatusControl(order) {
 
 async function loadAdmin() {
   try {
-    const [users, products, orders] = await Promise.all([
+    const [users, orders] = await Promise.all([
       api("/api/users"),
-      loadProducts(true),
       api("/api/orders"),
     ]);
     renderUsers(users.users);
-    renderAdminProducts(products);
     renderOrders(orders.orders, $("#adminOrders"), true);
   } catch (error) {
     notify(error.message);
@@ -334,6 +321,7 @@ function renderUsers(users) {
               .join("")}
           </select>
           <button onclick="saveUser(${user.id})">儲存</button>
+          <button class="danger" data-username="${escapeHtml(user.username)}" onclick="deleteUser(${user.id}, this.dataset.username)">刪除</button>
         </div>
       </div>
     `)
@@ -356,80 +344,12 @@ async function saveUser(id) {
   }
 }
 
-function renderAdminProducts(products) {
-  state.adminProducts = products;
-  $("#adminProducts").innerHTML = products
-    .map((product) => `
-      <div class="table-row">
-        <div class="line">
-          <strong>${escapeHtml(product.name)}</strong>
-          <span class="price">${money(product.price)}</span>
-        </div>
-        <small>${escapeHtml(product.category)}｜${escapeHtml(translateProductStatus(product.status))}｜庫存 ${product.stock}</small>
-        <div class="table-actions">
-          <button onclick="editProductById(${product.id})">編輯</button>
-          <button class="ghost" onclick="deleteProduct(${product.id})">刪除</button>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function editProductById(id) {
-  const product = state.adminProducts.find((item) => item.id === id);
-  if (product) editProduct(product);
-}
-
-function editProduct(product) {
-  const form = $("#productForm");
-  Object.entries(product).forEach(([key, value]) => {
-    if (!form.elements[key]) return;
-    if (form.elements[key].type === "checkbox") form.elements[key].checked = Boolean(value);
-    else form.elements[key].value = value ?? "";
-  });
-  $("#productFormTitle").textContent = `編輯商品 #${product.id}`;
-  window.scrollTo({ top: $("#adminView").offsetTop - 80, behavior: "smooth" });
-}
-
-async function saveProduct(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = Object.fromEntries(new FormData(form));
-  const id = data.id;
-
-  if (!id) {
-    notify("請先從右側清單選擇要編輯的商品");
-    return;
-  }
-
-  const existingProduct = state.adminProducts.find((item) => String(item.id) === String(id));
-  if (existingProduct) data.image_url = existingProduct.image_url || "";
-  data.featured = Boolean(form.elements.featured.checked);
-  data.price = Number(data.price);
-  data.stock = Number(data.stock);
-  delete data.id;
-
+async function deleteUser(id, username) {
+  if (!confirm(`確定要刪除會員「${username}」嗎？此操作無法復原。`)) return;
   try {
-    await api(`/api/products/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-    resetProductForm();
-    await loadAdmin();
-    await loadProducts();
-    notify("商品已更新");
-  } catch (error) {
-    notify(error.message);
-  }
-}
-
-async function deleteProduct(id) {
-  if (!confirm("確定刪除此商品？")) return;
-  try {
-    await api(`/api/products/${id}`, { method: "DELETE" });
-    await loadAdmin();
-    await loadProducts();
-    notify("商品已刪除");
+    await api(`/api/users/${id}`, { method: "DELETE" });
+    notify("會員資料已刪除");
+    loadAdmin();
   } catch (error) {
     notify(error.message);
   }
@@ -445,12 +365,6 @@ async function updateOrder(id, status) {
   }
 }
 
-function resetProductForm() {
-  $("#productForm").reset();
-  $("#productForm").elements.id.value = "";
-  $("#productFormTitle").textContent = "選擇商品後編輯";
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -464,8 +378,6 @@ function bindEvents() {
   $("#openCartBtn").addEventListener("click", () => $("#cartDrawer").classList.add("open"));
   $("#closeCartBtn").addEventListener("click", () => $("#cartDrawer").classList.remove("open"));
   $("#checkoutForm").addEventListener("submit", checkout);
-  $("#productForm").addEventListener("submit", saveProduct);
-  $("#resetProductBtn").addEventListener("click", resetProductForm);
   $("#logoutBtn").addEventListener("click", async () => {
     await api("/api/logout", { method: "POST" });
     state.user = null;
