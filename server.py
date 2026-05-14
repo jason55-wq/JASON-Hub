@@ -1,0 +1,568 @@
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import sqlite3
+import time
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DB_PATH = os.path.join(DATA_DIR, "studio_shop.db")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+SESSION_TTL = 60 * 60 * 24 * 7
+
+
+def db():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys = ON")
+    return con
+
+
+def hash_password(password, salt=None):
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000)
+    return f"{salt}${digest.hex()}"
+
+
+def verify_password(password, stored):
+    try:
+        salt, digest = stored.split("$", 1)
+    except ValueError:
+        return False
+    return hmac.compare_digest(hash_password(password, salt), stored)
+
+
+def row_to_dict(row):
+    return dict(row) if row else None
+
+
+def public_user(row):
+    if not row:
+        return None
+    user = dict(row)
+    user.pop("password_hash", None)
+    return user
+
+
+def init_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with db() as con:
+        con.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                expires_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Studio Goods',
+                description TEXT NOT NULL DEFAULT '',
+                price INTEGER NOT NULL,
+                stock INTEGER NOT NULL DEFAULT 0,
+                image_url TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                featured INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                customer_name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                address TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                total INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'new',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS order_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                product_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_price INTEGER NOT NULL,
+                subtotal INTEGER NOT NULL
+            );
+            """
+        )
+
+        if not con.execute("SELECT id FROM users WHERE username = ?", ("admin",)).fetchone():
+            con.execute(
+                """
+                INSERT INTO users (username, email, password_hash, role, status)
+                VALUES (?, ?, ?, 'admin', 'approved')
+                """,
+                ("admin", "admin@studio.local", hash_password("admin123")),
+            )
+
+        if con.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"] == 0:
+            samples = [
+                (
+                    "手作陶杯工作坊套組",
+                    "Workshop Kit",
+                    "含基礎陶杯胚、釉色試片與一次線上指導，適合新會員入門。",
+                    1280,
+                    12,
+                    "https://images.unsplash.com/photo-1493106819501-66d381c466f1?auto=format&fit=crop&w=900&q=80",
+                    "active",
+                    1,
+                ),
+                (
+                    "植栽香氛蠟燭",
+                    "Studio Goods",
+                    "小批量灌製，木質調與清草香，適合工作桌與展示空間。",
+                    680,
+                    24,
+                    "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=900&q=80",
+                    "active",
+                    1,
+                ),
+                (
+                    "會員限定掛畫",
+                    "Member Exclusive",
+                    "限量印刷與手工編號，審核通過會員才可下單收藏。",
+                    2200,
+                    6,
+                    "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=900&q=80",
+                    "active",
+                    0,
+                ),
+            ]
+            con.executemany(
+                """
+                INSERT INTO products
+                (name, category, description, price, stock, image_url, status, featured)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                samples,
+            )
+
+
+class App(BaseHTTPRequestHandler):
+    server_version = "StudioShop/1.0"
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/":
+            return self.serve_file(os.path.join(BASE_DIR, "index.html"), "text/html; charset=utf-8")
+        if parsed.path.startswith("/static/"):
+            name = parsed.path.replace("/static/", "", 1)
+            if ".." in name or name.startswith("/"):
+                return self.error(400, "Invalid path")
+            path = os.path.join(STATIC_DIR, name)
+            content_type = "text/plain"
+            if name.endswith(".css"):
+                content_type = "text/css; charset=utf-8"
+            elif name.endswith(".js"):
+                content_type = "application/javascript; charset=utf-8"
+            return self.serve_file(path, content_type)
+        if parsed.path.startswith("/api/"):
+            return self.handle_api("GET", parsed.path, parse_qs(parsed.query))
+        return self.error(404, "Not found")
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            return self.handle_api("POST", parsed.path, {})
+        return self.error(404, "Not found")
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            return self.handle_api("PUT", parsed.path, {})
+        return self.error(404, "Not found")
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            return self.handle_api("DELETE", parsed.path, {})
+        return self.error(404, "Not found")
+
+    def serve_file(self, path, content_type):
+        if not os.path.exists(path):
+            return self.error(404, "Not found")
+        with open(path, "rb") as f:
+            content = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def read_json(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            return {}
+        try:
+            return json.loads(self.rfile.read(length).decode("utf-8"))
+        except json.JSONDecodeError:
+            raise ValueError("JSON 格式不正確")
+
+    def json(self, payload, status=200):
+        content = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def error(self, status, message):
+        return self.json({"ok": False, "error": message}, status)
+
+    def current_user(self):
+        cookie = self.headers.get("Cookie", "")
+        token = ""
+        for part in cookie.split(";"):
+            if part.strip().startswith("studio_session="):
+                token = part.strip().split("=", 1)[1]
+                break
+        if not token:
+            return None
+        now = int(time.time())
+        with db() as con:
+            row = con.execute(
+                """
+                SELECT users.id, username, email, role, status, created_at
+                FROM sessions
+                JOIN users ON users.id = sessions.user_id
+                WHERE token = ? AND expires_at > ?
+                """,
+                (token, now),
+            ).fetchone()
+        return row_to_dict(row)
+
+    def require_user(self):
+        user = self.current_user()
+        if not user:
+            self.error(401, "請先登入")
+            return None
+        if user["status"] != "approved":
+            self.error(403, "會員尚未通過審核")
+            return None
+        return user
+
+    def require_admin(self):
+        user = self.require_user()
+        if not user:
+            return None
+        if user["role"] != "admin":
+            self.error(403, "需要管理員權限")
+            return None
+        return user
+
+    def handle_api(self, method, path, query):
+        try:
+            if path == "/api/me" and method == "GET":
+                return self.json({"ok": True, "user": self.current_user()})
+            if path == "/api/register" and method == "POST":
+                return self.register()
+            if path == "/api/login" and method == "POST":
+                return self.login()
+            if path == "/api/logout" and method == "POST":
+                return self.logout()
+            if path == "/api/products" and method == "GET":
+                return self.list_products(query)
+            if path == "/api/products" and method == "POST":
+                return self.create_product()
+            if path.startswith("/api/products/") and method == "PUT":
+                return self.update_product(int(path.rsplit("/", 1)[1]))
+            if path.startswith("/api/products/") and method == "DELETE":
+                return self.delete_product(int(path.rsplit("/", 1)[1]))
+            if path == "/api/users" and method == "GET":
+                return self.list_users()
+            if path.startswith("/api/users/") and method == "PUT":
+                return self.update_user(int(path.rsplit("/", 1)[1]))
+            if path == "/api/orders" and method == "GET":
+                return self.list_orders()
+            if path == "/api/orders" and method == "POST":
+                return self.create_order()
+            if path.startswith("/api/orders/") and method == "PUT":
+                return self.update_order(int(path.rsplit("/", 1)[1]))
+            return self.error(404, "API 不存在")
+        except ValueError as exc:
+            return self.error(400, str(exc))
+        except sqlite3.IntegrityError:
+            return self.error(409, "帳號、Email 或資料已存在")
+        except Exception as exc:
+            return self.error(500, f"伺服器錯誤：{exc}")
+
+    def register(self):
+        data = self.read_json()
+        username = data.get("username", "").strip()
+        email = data.get("email", "").strip()
+        password = data.get("password", "")
+        if len(username) < 3 or "@" not in email or len(password) < 6:
+            raise ValueError("請輸入至少 3 字元帳號、正確 Email，以及至少 6 字元密碼")
+        with db() as con:
+            con.execute(
+                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+                (username, email, hash_password(password)),
+            )
+        return self.json({"ok": True, "message": "已送出會員申請，等待管理員審核"})
+
+    def login(self):
+        data = self.read_json()
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        with db() as con:
+            user = con.execute("SELECT * FROM users WHERE username = ? OR email = ?", (username, username)).fetchone()
+            if not user or not verify_password(password, user["password_hash"]):
+                return self.error(401, "帳號或密碼錯誤")
+            token = secrets.token_urlsafe(32)
+            con.execute(
+                "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
+                (token, user["id"], int(time.time()) + SESSION_TTL),
+            )
+        cookie = f"studio_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_TTL}"
+        self.send_response(200)
+        self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps({"ok": True, "user": public_user(user)}, ensure_ascii=False).encode("utf-8"))
+
+    def logout(self):
+        cookie = self.headers.get("Cookie", "")
+        token = ""
+        for part in cookie.split(";"):
+            if part.strip().startswith("studio_session="):
+                token = part.strip().split("=", 1)[1]
+        with db() as con:
+            if token:
+                con.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        self.send_response(200)
+        self.send_header("Set-Cookie", "studio_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b'{"ok": true}')
+
+    def list_products(self, query):
+        admin = query.get("admin", ["0"])[0] == "1"
+        if admin and not self.require_admin():
+            return
+        sql = "SELECT * FROM products"
+        params = []
+        if not admin:
+            sql += " WHERE status = 'active'"
+        sql += " ORDER BY featured DESC, created_at DESC"
+        with db() as con:
+            products = [dict(row) for row in con.execute(sql, params).fetchall()]
+        return self.json({"ok": True, "products": products})
+
+    def create_product(self):
+        if not self.require_admin():
+            return
+        data = self.product_payload()
+        with db() as con:
+            cur = con.execute(
+                """
+                INSERT INTO products (name, category, description, price, stock, image_url, status, featured)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                data,
+            )
+        return self.json({"ok": True, "id": cur.lastrowid})
+
+    def update_product(self, product_id):
+        if not self.require_admin():
+            return
+        data = self.product_payload()
+        with db() as con:
+            con.execute(
+                """
+                UPDATE products
+                SET name = ?, category = ?, description = ?, price = ?, stock = ?, image_url = ?,
+                    status = ?, featured = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (*data, product_id),
+            )
+        return self.json({"ok": True})
+
+    def delete_product(self, product_id):
+        if not self.require_admin():
+            return
+        with db() as con:
+            used = con.execute("SELECT id FROM order_items WHERE product_id = ? LIMIT 1", (product_id,)).fetchone()
+            if used:
+                con.execute(
+                    "UPDATE products SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (product_id,),
+                )
+            else:
+                con.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        return self.json({"ok": True})
+
+    def product_payload(self):
+        data = self.read_json()
+        name = data.get("name", "").strip()
+        category = data.get("category", "Studio Goods").strip() or "Studio Goods"
+        description = data.get("description", "").strip()
+        image_url = data.get("image_url", "").strip()
+        status = data.get("status", "draft")
+        if status not in {"draft", "active", "archived"}:
+            raise ValueError("商品狀態不正確")
+        try:
+            price = int(data.get("price", 0))
+            stock = int(data.get("stock", 0))
+            featured = 1 if data.get("featured") else 0
+        except (TypeError, ValueError):
+            raise ValueError("價格與庫存需為數字")
+        if not name or price < 0 or stock < 0:
+            raise ValueError("請輸入商品名稱，價格與庫存不可小於 0")
+        return (name, category, description, price, stock, image_url, status, featured)
+
+    def list_users(self):
+        if not self.require_admin():
+            return
+        with db() as con:
+            users = [
+                dict(row)
+                for row in con.execute(
+                    "SELECT id, username, email, role, status, created_at FROM users ORDER BY created_at DESC"
+                ).fetchall()
+            ]
+        return self.json({"ok": True, "users": users})
+
+    def update_user(self, user_id):
+        admin = self.require_admin()
+        if not admin:
+            return
+        data = self.read_json()
+        status = data.get("status")
+        role = data.get("role")
+        if status not in {"pending", "approved", "rejected"} or role not in {"member", "admin"}:
+            raise ValueError("會員狀態或角色不正確")
+        if user_id == admin["id"] and (status != "approved" or role != "admin"):
+            raise ValueError("不能移除目前登入管理員的管理權限")
+        with db() as con:
+            con.execute("UPDATE users SET status = ?, role = ? WHERE id = ?", (status, role, user_id))
+        return self.json({"ok": True})
+
+    def list_orders(self):
+        user = self.require_user()
+        if not user:
+            return
+        with db() as con:
+            if user["role"] == "admin":
+                rows = con.execute(
+                    """
+                    SELECT orders.*, users.username
+                    FROM orders JOIN users ON users.id = orders.user_id
+                    ORDER BY orders.created_at DESC
+                    """
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT orders.*, ? AS username FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+                    (user["username"], user["id"]),
+                ).fetchall()
+            orders = []
+            for row in rows:
+                order = dict(row)
+                order["items"] = [
+                    dict(item)
+                    for item in con.execute(
+                        "SELECT product_name, quantity, unit_price, subtotal FROM order_items WHERE order_id = ?",
+                        (order["id"],),
+                    ).fetchall()
+                ]
+                orders.append(order)
+        return self.json({"ok": True, "orders": orders})
+
+    def create_order(self):
+        user = self.require_user()
+        if not user:
+            return
+        data = self.read_json()
+        items = data.get("items", [])
+        customer_name = data.get("customer_name", "").strip()
+        phone = data.get("phone", "").strip()
+        address = data.get("address", "").strip()
+        note = data.get("note", "").strip()
+        if not items or not customer_name or not phone or not address:
+            raise ValueError("請填寫收件資料並選擇商品")
+        with db() as con:
+            total = 0
+            order_items = []
+            for item in items:
+                product_id = int(item.get("product_id", 0))
+                quantity = int(item.get("quantity", 0))
+                if quantity <= 0:
+                    raise ValueError("商品數量需大於 0")
+                product = con.execute("SELECT * FROM products WHERE id = ? AND status = 'active'", (product_id,)).fetchone()
+                if not product:
+                    raise ValueError("商品不存在或尚未上架")
+                if product["stock"] < quantity:
+                    raise ValueError(f"{product['name']} 庫存不足")
+                subtotal = product["price"] * quantity
+                total += subtotal
+                order_items.append((product, quantity, subtotal))
+
+            cur = con.execute(
+                """
+                INSERT INTO orders (user_id, customer_name, phone, address, note, total)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (user["id"], customer_name, phone, address, note, total),
+            )
+            order_id = cur.lastrowid
+            for product, quantity, subtotal in order_items:
+                con.execute(
+                    """
+                    INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, subtotal)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (order_id, product["id"], product["name"], quantity, product["price"], subtotal),
+                )
+                con.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (quantity, product["id"]))
+        return self.json({"ok": True, "order_id": order_id})
+
+    def update_order(self, order_id):
+        if not self.require_admin():
+            return
+        data = self.read_json()
+        status = data.get("status")
+        if status not in {"new", "paid", "processing", "shipped", "completed", "cancelled"}:
+            raise ValueError("訂單狀態不正確")
+        with db() as con:
+            con.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+        return self.json({"ok": True})
+
+
+def main():
+    init_db()
+    host = "127.0.0.1"
+    port = int(os.environ.get("PORT", "8012"))
+    httpd = ThreadingHTTPServer((host, port), App)
+    print(f"Studio shop running at http://{host}:{port}/")
+    httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
