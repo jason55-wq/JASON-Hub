@@ -17,7 +17,7 @@
       </a>
       <nav>
         <button data-view="shop">商店</button>
-        <button data-view="orders" class="auth-only">我的訂單</button>
+        <button data-view="orders" class="auth-only">訂單狀態</button>
         <button data-view="admin" class="admin-only">管理後台</button>
       </nav>
       <div class="account">
@@ -62,7 +62,6 @@
             <label>帳號或 Email<input name="username" autocomplete="username" required></label>
             <label>密碼<input name="password" type="password" autocomplete="current-password" required></label>
             <button class="primary">登入</button>
-            <p class="hint">預設管理員：123 / 123</p>
           </form>
           <form id="registerForm" class="panel">
             <p class="eyebrow">會員申請</p>
@@ -80,7 +79,8 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">訂單</p>
-            <h2>我的訂單</h2>
+            <h2>訂單狀態</h2>
+            <p class="hint">管理員更新後，這裡會顯示最新的訂單狀態。</p>
           </div>
         </div>
         <div id="ordersList" class="stack"></div>
@@ -102,7 +102,7 @@
             </div>
             <div class="panel">
               <p class="eyebrow">出貨</p>
-              <h2>訂單管理</h2>
+              <h2>管理訂單狀態</h2>
               <div id="adminOrders" class="table"></div>
             </div>
           </div>
