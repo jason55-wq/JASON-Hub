@@ -172,6 +172,12 @@ def init_db():
                 unit_price INTEGER NOT NULL,
                 subtotal INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS site_stats (
+                key TEXT PRIMARY KEY,
+                value INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
 
@@ -310,6 +316,8 @@ class App(BaseHTTPRequestHandler):
         path = os.path.join(BASE_DIR, "index.html")
         if os.path.exists(path):
             try:
+                if self.command == "GET":
+                    self.record_home_visit()
                 with open(path, "r", encoding="utf-8") as f:
                     html = f.read()
                 image_path = os.path.join(BASE_DIR, "static", "vios.png")
@@ -341,6 +349,32 @@ class App(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.write_body(fallback)
+
+    def record_home_visit(self):
+        with db() as con:
+            con.execute(
+                """
+                INSERT INTO site_stats (key, value)
+                VALUES ('home_visits', 1)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = value + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                """
+            )
+
+    def visit_stats(self):
+        with db() as con:
+            row = con.execute(
+                "SELECT value, updated_at FROM site_stats WHERE key = 'home_visits'"
+            ).fetchone()
+        return self.json(
+            {
+                "ok": True,
+                "visits": int(row["value"]) if row else 0,
+                "updated_at": row["updated_at"] if row else None,
+            }
+        )
+
     def read_json(self):
         length = int(self.headers.get("Content-Length", 0))
         if length == 0:
@@ -407,6 +441,8 @@ class App(BaseHTTPRequestHandler):
         try:
             if path == "/api/me" and method == "GET":
                 return self.json({"ok": True, "user": self.current_user()})
+            if path == "/api/visit-stats" and method == "GET":
+                return self.visit_stats()
             if path == "/api/register" and method == "POST":
                 return self.register()
             if path == "/api/login" and method == "POST":

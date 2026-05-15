@@ -184,6 +184,21 @@ main {
   font-size: 28px;
 }
 
+.visitor-count {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.visitor-count strong {
+  margin: 0;
+  font-size: 24px;
+}
+
 .section-title {
   display: flex;
   justify-content: space-between;

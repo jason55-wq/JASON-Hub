@@ -2,6 +2,7 @@ const state = {
   user: null,
   products: [],
   cart: loadCart(),
+  visitorCount: 0,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -120,6 +121,17 @@ async function loadProducts(admin = false) {
     renderProducts();
   }
   return data.products || [];
+}
+
+async function loadVisitStats() {
+  const data = await api("/api/visit-stats");
+  state.visitorCount = Number(data.visits || 0);
+  renderVisitStats();
+}
+
+function renderVisitStats() {
+  const count = $("#visitorCount");
+  if (count) count.textContent = state.visitorCount.toLocaleString("zh-TW");
 }
 
 function renderProducts() {
@@ -500,6 +512,12 @@ async function init() {
   } catch (error) {
     const grid = $("#productsGrid");
     if (grid) grid.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
+  }
+
+  try {
+    await loadVisitStats();
+  } catch {
+    renderVisitStats();
   }
 
   renderCart();
