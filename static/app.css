@@ -207,6 +207,38 @@ main {
   margin: 38px 0 18px;
 }
 
+.section-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mode-switcher {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 250, 242, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.mode-button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.mode-button.active {
+  background: var(--ink);
+  color: var(--surface);
+}
+
 .section-title h2,
 .panel h2 {
   margin: 4px 0 14px;
@@ -277,6 +309,75 @@ main {
   border-radius: 999px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.read-content {
+  display: grid;
+  gap: 18px;
+}
+
+.story-card {
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 250, 242, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.story-media {
+  min-height: 100%;
+  background: #efe7da;
+}
+
+.story-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.story-body {
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.story-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.story-body h3 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1.15;
+}
+
+.story-body p {
+  margin: 0;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.story-body a {
+  color: var(--clay);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.story-body a:hover {
+  text-decoration: underline;
+}
+
+.story-card-project {
+  grid-template-columns: 1fr;
 }
 
 .panel {
@@ -413,12 +514,21 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .section-title,
+  .section-actions {
+    align-items: start;
+  }
+
   .account {
     justify-content: flex-start;
   }
 
   .product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .story-card {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -438,5 +548,13 @@ textarea {
 
   .product-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mode-switcher {
+    width: 100%;
+  }
+
+  .mode-button {
+    flex: 1;
   }
 }

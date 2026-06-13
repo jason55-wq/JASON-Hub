@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>傑生工程工作室</title>
+    <title>JASON-Hub 工作室商店</title>
     <link rel="stylesheet" href="/static/app.css">
   </head>
   <body>
@@ -11,14 +11,14 @@
       <a class="brand" href="#shop">
         <span class="brand-mark">J</span>
         <span>
-          <strong>傑生工程工作室</strong>
-          <small>工作室選品與訂單管理</small>
+          <strong>JASON-Hub 工作室</strong>
+          <small>作品展示、會員管理與訂單流程整合</small>
         </span>
       </a>
       <nav>
-        <button data-view="shop">商店</button>
-        <button data-view="orders" class="auth-only">訂單記錄</button>
-        <button data-view="admin" class="admin-only">後台管理</button>
+        <button data-view="shop">首頁</button>
+        <button data-view="orders" class="auth-only">訂單查詢</button>
+        <button data-view="admin" class="admin-only">管理後台</button>
       </nav>
       <div class="account">
         <span id="userBadge"></span>
@@ -33,16 +33,16 @@
       <section id="shopView" class="view active">
         <div class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">嵌入式系統工作室</p>
-            <h1>專注嵌入式系統開發，打造穩定可靠的智慧應用。</h1>
-            <p>我們整合韌體設計、硬體控制、感測資料與通訊介面，協助專案從原型驗證到實際部署，讓每個系統都更貼近現場需求。</p>
+            <p class="eyebrow">GitHub 專案介紹</p>
+            <h1>JASON-Hub 會員網站與後台管理整合系統</h1>
+            <p>這個專案使用 Python 與 SQLite 建立，提供會員註冊、登入審核、購物車、訂單查詢與管理員後台等功能，適合用來展示完整的網站流程與基礎後台架構。<a href="https://github.com/jason55-wq/JASON-Hub" target="_blank" rel="noreferrer">前往 GitHub 查看專案</a>。</p>
           </div>
           <div class="hero-panel">
             <span>會員狀態</span>
             <strong id="heroStatus">登入後可下單</strong>
-            <small>登入並通過審核後，就可以開始下單與查看訂單。</small>
+            <small>登入前可以瀏覽商品，通過審核後即可建立訂單。</small>
             <div class="visitor-count">
-              <span>瀏覽人數</span>
+              <span>瀏覽人次</span>
               <strong id="visitorCount">0</strong>
             </div>
           </div>
@@ -50,18 +50,24 @@
 
         <div class="section-title">
           <div>
-            <p class="eyebrow">商品</p>
-            <h2>最新上架</h2>
+            <p class="eyebrow">內容切換</p>
+            <h2>商品 / 專案介紹</h2>
           </div>
-          <button id="openCartBtn" class="primary">購物車 <span id="cartCount">0</span></button>
+          <div class="section-actions">
+            <div class="mode-switcher" role="tablist" aria-label="內容模式切換">
+              <button type="button" class="mode-button active" data-read-mode="product">商品</button>
+              <button type="button" class="mode-button" data-read-mode="project">專案介紹</button>
+            </div>
+            <button id="openCartBtn" class="primary">購物車 <span id="cartCount">0</span></button>
+          </div>
         </div>
-        <div id="productsGrid" class="product-grid"></div>
+        <div id="readContent" class="read-content"></div>
       </section>
 
       <section id="authView" class="view">
         <div class="auth-grid">
           <form id="loginForm" class="panel">
-            <p class="eyebrow">會員 / 管理員</p>
+            <p class="eyebrow">會員登入</p>
             <h2>登入</h2>
             <label>帳號或 Email<input name="username" autocomplete="username" required></label>
             <label>密碼<input name="password" type="password" autocomplete="current-password" required></label>
@@ -69,12 +75,12 @@
           </form>
           <form id="registerForm" class="panel">
             <p class="eyebrow">會員註冊</p>
-            <h2>註冊帳號</h2>
+            <h2>註冊會員</h2>
             <label>帳號<input name="username" minlength="3" required></label>
             <label>Email<input name="email" type="email" required></label>
             <label>密碼<input name="password" type="password" minlength="6" required></label>
-            <button class="primary">送出申請</button>
-            <p class="hint">註冊後需通過審核，才能登入並開始下單。</p>
+            <button class="primary">註冊</button>
+            <p class="hint">註冊後需經管理員審核，通過後才可以下單。</p>
           </form>
         </div>
       </section>
@@ -83,8 +89,8 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">訂單</p>
-            <h2>訂單記錄</h2>
-            <p class="hint">登入後可以查看自己的訂單狀態與金額。</p>
+            <h2>訂單查詢</h2>
+            <p class="hint">登入後可查看自己的訂單與審核狀態。</p>
           </div>
         </div>
         <div id="ordersList" class="stack"></div>
@@ -93,8 +99,8 @@
       <section id="adminView" class="view">
         <div class="section-title">
           <div>
-            <p class="eyebrow">後台管理</p>
-            <h2>管理總覽</h2>
+            <p class="eyebrow">管理後台</p>
+            <h2>後台管理</h2>
           </div>
         </div>
         <div class="admin-layout">
@@ -106,7 +112,7 @@
             </div>
             <div class="panel">
               <p class="eyebrow">訂單</p>
-              <h2>訂單管理</h2>
+              <h2>訂單審核</h2>
               <div id="adminOrders" class="table"></div>
             </div>
           </div>

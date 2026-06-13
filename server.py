@@ -17,8 +17,8 @@ DB_PATH = os.path.join(DATA_DIR, "studio_shop.db")
 PRODUCTS_JSON_PATH = os.path.join(DATA_DIR, "products.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 SESSION_TTL = 60 * 60 * 24 * 7
-DEFAULT_ADMIN_USERNAME = "123"
-DEFAULT_ADMIN_PASSWORD = "123"
+DEFAULT_ADMIN_USERNAME = "we252668"
+DEFAULT_ADMIN_PASSWORD = "edc25610731"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
 ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 

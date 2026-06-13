@@ -1,8 +1,9 @@
-const state = {
+﻿const state = {
   user: null,
   products: [],
   cart: loadCart(),
   visitorCount: 0,
+  readMode: "project",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -118,7 +119,6 @@ async function loadProducts(admin = false) {
   const data = await api(`/api/products${admin ? "?admin=1" : ""}`);
   if (!admin) {
     state.products = data.products || [];
-    renderProducts();
   }
   return data.products || [];
 }
@@ -134,39 +134,36 @@ function renderVisitStats() {
   if (count) count.textContent = state.visitorCount.toLocaleString("zh-TW");
 }
 
-function renderProducts() {
-  const grid = $("#productsGrid");
-  if (!grid) return;
+function setReadMode(mode) {
+  state.readMode = mode === "product" ? "product" : "project";
+  renderReadContent();
+}
 
-  if (!state.products.length) {
-    grid.innerHTML = `<p class="hint">目前沒有商品。</p>`;
-    return;
-  }
+function renderReadContent() {
+  const wrap = $("#readContent");
+  if (!wrap) return;
 
-  grid.innerHTML = state.products
-    .map((product) => {
-      const image = product.image_url || DEFAULT_PRODUCT_IMAGE;
-      const disabled = product.stock <= 0 ? "disabled" : "";
-      const buttonText = product.stock <= 0 ? "已售完" : "加入購物車";
-      return `
-        <article class="product-card">
-          <img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" onerror="this.src='${escapeHtml(DEFAULT_PRODUCT_IMAGE)}'">
-          <div class="product-body">
-            <div class="product-meta">
-              <span class="tag">${escapeHtml(product.category || "工作室選品")}</span>
-              <span class="price">${money(product.price)}</span>
-            </div>
-            <h3>${escapeHtml(product.name)}</h3>
-            <p>${escapeHtml(product.description || "請參考商品說明。")}</p>
-            <div class="line">
-              <small>庫存 ${Number(product.stock || 0)}</small>
-              <button class="primary" ${disabled} onclick="addToCart(${product.id})">${buttonText}</button>
-            </div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  $$(".mode-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.readMode === state.readMode);
+  });
+
+  const projectContent = `
+    <article class="story-card story-card-project">
+      <div class="story-body">
+        <div class="story-head">
+          <span class="tag">專案介紹</span>
+          <span class="tag">DIY WIN10 聲控電腦 VIOS</span>
+        </div>
+        <h3>把電腦操作變成人人都能學會的聲控系統</h3>
+        <p>VIOS 是一個把語音操作、學習流程與 Windows 控制整合在一起的專案介紹頁。這個專案的重點不只是展示功能，而是把一套可學、可改、可延伸的 Python 工具，整理成更容易理解的實作範例。</p>
+        <p>VIOS 想解決的是「學會工具之後，能不能真的做出自己的作品」這件事。它從基礎的語音引導開始，讓初學者可以按步驟操作，再進一步延伸到個別練習、成果輸出，以及更多生活與學習情境的應用。像是語音輸入、語音回應輸出、MP3 檔案輸出、通訊介面、網頁圖形下載、一鍵操作與聲控連結等，都是這個系統希望帶給使用者的核心體驗。</p>
+        <p>如果你想看更完整的募資脈絡、理念與介紹，可以前往嘖嘖頁面了解：<br>https://www.zeczec.com/projects/diy-win10-vios</p>
+        <p>這不是單純的販售頁，而是一個希望讓更多人理解「如何把電腦操作變成可學習、可擴充的系統」的專案介紹。</p>
+      </div>
+    </article>
+  `;
+
+  wrap.innerHTML = state.readMode === "product" ? "" : projectContent;
 }
 
 function addToCart(productId) {
@@ -438,6 +435,10 @@ function bindEvents() {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
 
+  $$("[data-read-mode]").forEach((button) => {
+    button.addEventListener("click", () => setReadMode(button.dataset.readMode));
+  });
+
   const openCartBtn = $("#openCartBtn");
   const closeCartBtn = $("#closeCartBtn");
   const cartDrawer = $("#cartDrawer");
@@ -489,7 +490,7 @@ function bindEvents() {
         const data = Object.fromEntries(new FormData(form));
         const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
         form.reset();
-        notify(res.message || "申請成功");
+        notify(res.message || "註冊成功");
       } catch (error) {
         notify(error.message);
       }
@@ -510,9 +511,10 @@ async function init() {
   try {
     await loadProducts();
   } catch (error) {
-    const grid = $("#productsGrid");
+    const grid = $("#readContent");
     if (grid) grid.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
   }
+  renderReadContent();
 
   try {
     await loadVisitStats();
@@ -528,4 +530,5 @@ window.changeQty = changeQty;
 window.removeFromCart = removeFromCart;
 
 init().catch((error) => notify(error.message));
+
 
