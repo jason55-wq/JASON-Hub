@@ -45,6 +45,23 @@ button:hover {
   border-color: var(--accent);
 }
 
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  border-color: var(--accent);
+}
+
 .primary {
   border-color: var(--accent);
   background: var(--accent);
