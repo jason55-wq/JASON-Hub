@@ -81,12 +81,18 @@ def public_user(row):
 
 
 def mail_settings():
+    # 支援兩組環境變數名稱：
+    # 1. Render 上建議設定的 EMAIL_USER / EMAIL_PASSWORD / ADMIN_EMAIL
+    # 2. 原本程式可用的 MAIL_USERNAME / MAIL_PASSWORD / MAIL_TO
+    #
+    # Gmail 建議使用 smtp.gmail.com + 587 + STARTTLS。
     return {
         "server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
         "port": int(os.getenv("MAIL_PORT", "587")),
         "use_tls": os.getenv("MAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"},
-        "username": os.getenv("MAIL_USERNAME"),
-        "password": os.getenv("MAIL_PASSWORD"),
+        "username": os.getenv("EMAIL_USER") or os.getenv("MAIL_USERNAME"),
+        "password": (os.getenv("EMAIL_PASSWORD") or os.getenv("MAIL_PASSWORD") or "").replace(" ", ""),
+        "to": os.getenv("ADMIN_EMAIL") or os.getenv("MAIL_TO") or MAIL_TO,
     }
 
 
@@ -99,12 +105,12 @@ def log_mail_error(message):
 def send_member_apply_notification(*, name, email, phone, account, created_at):
     settings = mail_settings()
     if not settings["username"] or not settings["password"]:
-        raise RuntimeError("MAIL_USERNAME 或 MAIL_PASSWORD 未設定")
+        raise RuntimeError("EMAIL_USER / EMAIL_PASSWORD 或 MAIL_USERNAME / MAIL_PASSWORD 未設定")
 
     message = EmailMessage()
     message["Subject"] = "【會員網站】有新的會員申請"
     message["From"] = settings["username"]
-    message["To"] = MAIL_TO
+    message["To"] = settings["to"]
     message.set_content(
         "\n".join(
             [
@@ -125,6 +131,7 @@ def send_member_apply_notification(*, name, email, phone, account, created_at):
             smtp.ehlo()
         smtp.login(settings["username"], settings["password"])
         smtp.send_message(message)
+        print(f"會員申請通知信已寄出：{settings['to']}")
 
 def load_seed_products():
     if not os.path.exists(PRODUCTS_JSON_PATH):
