@@ -1,9 +1,9 @@
 ﻿import base64
 import smtplib
+import urllib.request
 from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, unquote
-from urllib import request as urlrequest
 import hashlib
 import hmac
 import json
@@ -24,27 +24,122 @@ DEFAULT_ADMIN_USERNAME = "we252668"
 DEFAULT_ADMIN_PASSWORD = "edc25610731"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
 ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
-MAIL_TO = "we25266855@gmail.com"
 MAIL_LOG_PATH = os.path.join(BASE_DIR, "mail.log")
 
 
-def load_env_file():
-    env_path = os.path.join(BASE_DIR, ".env")
-    if not os.path.exists(env_path):
-        return
-    with open(env_path, "r", encoding="utf-8") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value
+def log_notification_error(message):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(MAIL_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        traceback.print_exc()
 
 
-load_env_file()
+def _clean_webhook_url(url):
+    url = (url or "").strip()
+    if not url:
+        return ""
+    # 如果不小心把瀏覽器看到的 JSON 貼進 Render，這裡會自動取出 url 欄位。
+    if url.startswith("{"):
+        try:
+            data = json.loads(url)
+            url = str(data.get("url", "")).strip()
+        except Exception:
+            pass
+    return url
+
+
+def send_discord_member_apply_notification(*, name, email, phone, account, created_at):
+    webhook_url = _clean_webhook_url(os.getenv("DISCORD_WEBHOOK_URL"))
+    if not webhook_url:
+        raise RuntimeError("DISCORD_WEBHOOK_URL 未設定")
+
+    payload = {
+        "content": (
+            "🔔 **有新的會員申請**\n"
+            f"姓名：{name}\n"
+            f"Email：{email}\n"
+            f"電話：{phone}\n"
+            f"帳號：{account}\n"
+            f"申請時間：{created_at}"
+        )
+    }
+    req = urllib.request.Request(
+        webhook_url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.status
+
+
+def mail_settings():
+    return {
+        "server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
+        "port": int(os.getenv("MAIL_PORT", "587")),
+        "use_tls": os.getenv("MAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"},
+        "username": os.getenv("MAIL_USERNAME") or os.getenv("EMAIL_USER"),
+        "password": os.getenv("MAIL_PASSWORD") or os.getenv("EMAIL_PASSWORD"),
+        "to": os.getenv("ADMIN_EMAIL") or os.getenv("MAIL_TO") or os.getenv("MAIL_USERNAME") or os.getenv("EMAIL_USER"),
+    }
+
+
+def send_gmail_member_apply_notification(*, name, email, phone, account, created_at):
+    settings = mail_settings()
+    if not settings["username"] or not settings["password"] or not settings["to"]:
+        raise RuntimeError("Gmail SMTP 環境變數未完整設定")
+
+    message = EmailMessage()
+    message["Subject"] = "【會員網站】有新的會員申請"
+    message["From"] = settings["username"]
+    message["To"] = settings["to"]
+    message.set_content(
+        "\n".join(
+            [
+                "有新的會員申請：",
+                f"姓名：{name}",
+                f"Email：{email}",
+                f"電話：{phone}",
+                f"帳號：{account}",
+                f"申請時間：{created_at}",
+            ]
+        )
+    )
+
+    with smtplib.SMTP(settings["server"], settings["port"], timeout=15) as smtp:
+        smtp.ehlo()
+        if settings["use_tls"]:
+            smtp.starttls()
+            smtp.ehlo()
+        smtp.login(settings["username"], settings["password"])
+        smtp.send_message(message)
+
+
+def notify_member_apply(*, name, email, phone, account, created_at):
+    # Discord 優先；Gmail 保留。任何通知失敗都不影響會員註冊成功。
+    try:
+        send_discord_member_apply_notification(
+            name=name, email=email, phone=phone, account=account, created_at=created_at
+        )
+        print("Discord 會員申請通知已送出")
+    except Exception as exc:
+        log_notification_error(f"Discord通知失敗 {type(exc).__name__}: {exc}")
+        traceback.print_exc()
+
+    try:
+        send_gmail_member_apply_notification(
+            name=name, email=email, phone=phone, account=account, created_at=created_at
+        )
+        print("Gmail 會員申請通知已送出")
+    except Exception as exc:
+        log_notification_error(f"Gmail通知失敗 {type(exc).__name__}: {exc}")
+        traceback.print_exc()
+
 
 
 def db():
@@ -79,94 +174,6 @@ def public_user(row):
     user.pop("password_hash", None)
     return user
 
-
-
-def mail_settings():
-    # 支援兩組環境變數名稱：
-    # 1. Render 上建議設定的 EMAIL_USER / EMAIL_PASSWORD / ADMIN_EMAIL
-    # 2. 原本程式可用的 MAIL_USERNAME / MAIL_PASSWORD / MAIL_TO
-    #
-    # Gmail 建議使用 smtp.gmail.com + 587 + STARTTLS。
-    return {
-        "server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-        "port": int(os.getenv("MAIL_PORT", "587")),
-        "use_tls": os.getenv("MAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"},
-        "username": os.getenv("EMAIL_USER") or os.getenv("MAIL_USERNAME"),
-        "password": (os.getenv("EMAIL_PASSWORD") or os.getenv("MAIL_PASSWORD") or "").replace(" ", ""),
-        "to": os.getenv("ADMIN_EMAIL") or os.getenv("MAIL_TO") or MAIL_TO,
-    }
-
-
-def log_mail_error(message):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    with open(MAIL_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
-
-
-def send_member_apply_notification(*, name, email, phone, account, created_at):
-    settings = mail_settings()
-    if not settings["username"] or not settings["password"]:
-        raise RuntimeError("EMAIL_USER / EMAIL_PASSWORD 或 MAIL_USERNAME / MAIL_PASSWORD 未設定")
-
-    message = EmailMessage()
-    message["Subject"] = "【會員網站】有新的會員申請"
-    message["From"] = settings["username"]
-    message["To"] = settings["to"]
-    message.set_content(
-        "\n".join(
-            [
-                "有新的會員申請：",
-                f"姓名：{name}",
-                f"Email：{email}",
-                f"電話：{phone}",
-                f"帳號：{account}",
-                f"申請時間：{created_at}",
-            ]
-        )
-    )
-
-    with smtplib.SMTP(settings["server"], settings["port"], timeout=15) as smtp:
-        smtp.ehlo()
-        if settings["use_tls"]:
-            smtp.starttls()
-            smtp.ehlo()
-        smtp.login(settings["username"], settings["password"])
-        smtp.send_message(message)
-        print(f"會員申請通知信已寄出：{settings['to']}")
-
-
-def discord_webhook_url():
-    # Render Environment Variable 請設定：DISCORD_WEBHOOK_URL
-    # 也相容 DISCORD_WEBHOOK。
-    return os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK")
-
-
-def send_discord_member_apply_notification(*, name, email, phone, account, created_at):
-    webhook_url = discord_webhook_url()
-    if not webhook_url:
-        raise RuntimeError("DISCORD_WEBHOOK_URL 未設定")
-
-    content = "\n".join(
-        [
-            "📩 **會員網站有新的會員申請**",
-            f"姓名：{name}",
-            f"Email：{email}",
-            f"電話：{phone}",
-            f"帳號：{account}",
-            f"申請時間：{created_at}",
-        ]
-    )
-    payload = json.dumps({"content": content}, ensure_ascii=False).encode("utf-8")
-    req = urlrequest.Request(
-        webhook_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlrequest.urlopen(req, timeout=15) as resp:
-        if resp.status not in (200, 204):
-            raise RuntimeError(f"Discord Webhook 回應異常：HTTP {resp.status}")
-    print("Discord 會員申請通知已送出")
 
 def load_seed_products():
     if not os.path.exists(PRODUCTS_JSON_PATH):
@@ -607,35 +614,16 @@ class App(BaseHTTPRequestHandler):
             )
             created_row = con.execute("SELECT created_at FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
             created_at = created_row["created_at"] if created_row else time.strftime("%Y-%m-%d %H:%M:%S")
-        # 通知管理員：Gmail 與 Discord 都不影響原本會員註冊流程。
-        # Gmail 沒設定或寄送失敗時，會員申請仍然成功，只會記錄錯誤。
-        try:
-            send_member_apply_notification(
-                name=name,
-                email=email,
-                phone=phone,
-                account=username,
-                created_at=created_at,
-            )
-        except Exception as exc:
-            log_mail_error(f"Gmail {type(exc).__name__}: {exc}")
-            traceback.print_exc()
 
-        # Discord Webhook：只要 Render 有設定 DISCORD_WEBHOOK_URL，就會同步通知到 Discord。
-        try:
-            if discord_webhook_url():
-                send_discord_member_apply_notification(
-                    name=name,
-                    email=email,
-                    phone=phone,
-                    account=username,
-                    created_at=created_at,
-                )
-        except Exception as exc:
-            log_mail_error(f"Discord {type(exc).__name__}: {exc}")
-            traceback.print_exc()
-
+        notify_member_apply(
+            name=name,
+            email=email,
+            phone=phone,
+            account=username,
+            created_at=created_at,
+        )
         return self.json({"ok": True, "message": "申請成功"})
+
     def login(self):
         data = self.read_json()
         username = data.get("username", "").strip()
@@ -939,4 +927,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
