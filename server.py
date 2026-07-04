@@ -3,6 +3,7 @@ import smtplib
 from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, unquote
+from urllib import request as urlrequest
 import hashlib
 import hmac
 import json
@@ -132,6 +133,40 @@ def send_member_apply_notification(*, name, email, phone, account, created_at):
         smtp.login(settings["username"], settings["password"])
         smtp.send_message(message)
         print(f"會員申請通知信已寄出：{settings['to']}")
+
+
+def discord_webhook_url():
+    # Render Environment Variable 請設定：DISCORD_WEBHOOK_URL
+    # 也相容 DISCORD_WEBHOOK。
+    return os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK")
+
+
+def send_discord_member_apply_notification(*, name, email, phone, account, created_at):
+    webhook_url = discord_webhook_url()
+    if not webhook_url:
+        raise RuntimeError("DISCORD_WEBHOOK_URL 未設定")
+
+    content = "\n".join(
+        [
+            "📩 **會員網站有新的會員申請**",
+            f"姓名：{name}",
+            f"Email：{email}",
+            f"電話：{phone}",
+            f"帳號：{account}",
+            f"申請時間：{created_at}",
+        ]
+    )
+    payload = json.dumps({"content": content}, ensure_ascii=False).encode("utf-8")
+    req = urlrequest.Request(
+        webhook_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=15) as resp:
+        if resp.status not in (200, 204):
+            raise RuntimeError(f"Discord Webhook 回應異常：HTTP {resp.status}")
+    print("Discord 會員申請通知已送出")
 
 def load_seed_products():
     if not os.path.exists(PRODUCTS_JSON_PATH):
@@ -572,6 +607,8 @@ class App(BaseHTTPRequestHandler):
             )
             created_row = con.execute("SELECT created_at FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
             created_at = created_row["created_at"] if created_row else time.strftime("%Y-%m-%d %H:%M:%S")
+        # 通知管理員：Gmail 與 Discord 都不影響原本會員註冊流程。
+        # Gmail 沒設定或寄送失敗時，會員申請仍然成功，只會記錄錯誤。
         try:
             send_member_apply_notification(
                 name=name,
@@ -581,8 +618,23 @@ class App(BaseHTTPRequestHandler):
                 created_at=created_at,
             )
         except Exception as exc:
-            log_mail_error(f"{type(exc).__name__}: {exc}")
+            log_mail_error(f"Gmail {type(exc).__name__}: {exc}")
             traceback.print_exc()
+
+        # Discord Webhook：只要 Render 有設定 DISCORD_WEBHOOK_URL，就會同步通知到 Discord。
+        try:
+            if discord_webhook_url():
+                send_discord_member_apply_notification(
+                    name=name,
+                    email=email,
+                    phone=phone,
+                    account=username,
+                    created_at=created_at,
+                )
+        except Exception as exc:
+            log_mail_error(f"Discord {type(exc).__name__}: {exc}")
+            traceback.print_exc()
+
         return self.json({"ok": True, "message": "申請成功"})
     def login(self):
         data = self.read_json()
