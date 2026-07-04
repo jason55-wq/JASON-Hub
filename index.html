@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>JASON-Hub 工作室商店</title>
+    <title>傑生工程工作室 | 嵌入式系統展示</title>
     <link rel="stylesheet" href="/static/app.css">
   </head>
   <body>
@@ -11,14 +11,14 @@
       <a class="brand" href="#shop">
         <span class="brand-mark">J</span>
         <span>
-          <strong>JASON-Hub 工作室</strong>
-          <small>作品展示、會員管理與訂單流程整合</small>
+          <strong>傑生工程工作室</strong>
+          <small>專注嵌入式系統與整合應用開發</small>
         </span>
       </a>
       <nav>
-        <a class="nav-link" href="https://blog.udn.com/we252668/article" target="_blank" rel="noreferrer">部落格</a>
-        <button data-view="shop">首頁</button>
-        <button data-view="orders" class="auth-only">訂單查詢</button>
+        <a class="nav-link" href="https://blog.udn.com/we252668/article" target="_blank" rel="noreferrer">工作室介紹</a>
+        <button data-view="shop">展示頁</button>
+        <button data-view="orders" class="auth-only">系統紀錄</button>
         <button data-view="admin" class="admin-only">管理後台</button>
       </nav>
       <div class="account">
@@ -34,16 +34,16 @@
       <section id="shopView" class="view active">
         <div class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">GitHub 專案介紹</p>
-            <h1>JASON-Hub 會員網站與後台管理整合系統</h1>
-            <p>這個專案使用 Python 與 SQLite 建立，提供會員註冊、登入審核、購物車、訂單查詢與管理員後台等功能，適合用來展示完整的網站流程與基礎後台架構。<a href="https://github.com/jason55-wq/JASON-Hub" target="_blank" rel="noreferrer">前往 GitHub 查看專案</a>。</p>
+            <p class="eyebrow">Embedded Systems Studio</p>
+            <h1>傑生工程工作室，專注嵌入式系統整合與實作展示</h1>
+            <p>我們以嵌入式系統為核心，結合 Python、感測裝置、資料收集與後台管理，呈現從硬體控制到資訊整合的完整應用流程。你也可以<a href="https://github.com/jason55-wq/JASON-Hub" target="_blank" rel="noreferrer">前往 GitHub 查看專案</a>。</p>
           </div>
           <div class="hero-panel">
-            <span>會員狀態</span>
-            <strong id="heroStatus">登入後可下單</strong>
-            <small>登入前可以瀏覽商品，通過審核後即可建立訂單。</small>
+            <span>工作室狀態</span>
+            <strong id="heroStatus">展示中</strong>
+            <small>目前展示嵌入式系統與整合應用流程，歡迎瀏覽作品內容。</small>
             <div class="visitor-count">
-              <span>瀏覽人次</span>
+              <span>訪客計數</span>
               <strong id="visitorCount">0</strong>
             </div>
           </div>
@@ -51,15 +51,15 @@
 
         <div class="section-title">
           <div>
-            <p class="eyebrow">內容切換</p>
-            <h2>商品 / 專案介紹</h2>
+            <p class="eyebrow">展示內容</p>
+            <h2>作品 / 嵌入式系統</h2>
           </div>
           <div class="section-actions">
-            <div class="mode-switcher" role="tablist" aria-label="內容模式切換">
-              <button type="button" class="mode-button active" data-read-mode="product">商品</button>
-              <button type="button" class="mode-button" data-read-mode="project">專案介紹</button>
+            <div class="mode-switcher" role="tablist" aria-label="展示模式">
+              <button type="button" class="mode-button active" data-read-mode="product">作品</button>
+              <button type="button" class="mode-button" data-read-mode="project">嵌入式系統</button>
             </div>
-            <button id="openCartBtn" class="primary">購物車 <span id="cartCount">0</span></button>
+            <button id="openCartBtn" class="primary">資料匣<span id="cartCount">0</span></button>
           </div>
         </div>
         <div id="readContent" class="read-content"></div>
@@ -76,12 +76,12 @@
           </form>
           <form id="registerForm" class="panel">
             <p class="eyebrow">會員註冊</p>
-            <h2>註冊會員</h2>
+            <h2>註冊帳號</h2>
             <label>帳號<input name="username" minlength="3" required></label>
             <label>Email<input name="email" type="email" required></label>
             <label>密碼<input name="password" type="password" minlength="6" required></label>
             <button class="primary">註冊</button>
-            <p class="hint">註冊後需經管理員審核，通過後才可以下單。</p>
+            <p class="hint">註冊後可瀏覽工作室展示內容與後台資訊。</p>
           </form>
         </div>
       </section>
@@ -89,9 +89,9 @@
       <section id="ordersView" class="view">
         <div class="section-title">
           <div>
-            <p class="eyebrow">訂單</p>
-            <h2>訂單查詢</h2>
-            <p class="hint">登入後可查看自己的訂單與審核狀態。</p>
+            <p class="eyebrow">專案管理</p>
+            <h2>系統紀錄查詢</h2>
+            <p class="hint">登入後可查看歷史紀錄、裝置資料與相關管理資訊。</p>
           </div>
         </div>
         <div id="ordersList" class="stack"></div>
@@ -101,19 +101,19 @@
         <div class="section-title">
           <div>
             <p class="eyebrow">管理後台</p>
-            <h2>後台管理</h2>
+            <h2>工作室管理介面</h2>
           </div>
         </div>
         <div class="admin-layout">
           <div class="stack">
             <div class="panel">
-              <p class="eyebrow">會員</p>
-              <h2>會員審核</h2>
+              <p class="eyebrow">會員管理</p>
+              <h2>帳號資料</h2>
               <div id="usersTable" class="table"></div>
             </div>
             <div class="panel">
-              <p class="eyebrow">訂單</p>
-              <h2>訂單審核</h2>
+              <p class="eyebrow">系統紀錄</p>
+              <h2>資料列表</h2>
               <div id="adminOrders" class="table"></div>
             </div>
           </div>
@@ -124,17 +124,17 @@
     <aside id="cartDrawer" class="drawer" aria-hidden="true">
       <div class="drawer-panel">
         <div class="drawer-head">
-          <h2>購物車</h2>
+          <h2>資料匣</h2>
           <button id="closeCartBtn" class="ghost">關閉</button>
         </div>
         <div id="cartItems" class="stack"></div>
         <form id="checkoutForm">
-          <label>收件人<input name="customer_name" required></label>
-          <label>電話<input name="phone" required></label>
+          <label>姓名<input name="customer_name" required></label>
+          <label>聯絡電話<input name="phone" required></label>
           <label>地址<input name="address" required></label>
           <label>備註<textarea name="note" rows="3"></textarea></label>
           <div class="total">總計 <strong id="cartTotal">NT$0</strong></div>
-          <button class="primary">送出訂單</button>
+          <button class="primary">送出資料</button>
         </form>
       </div>
     </aside>
