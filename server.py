@@ -24,6 +24,7 @@ DEFAULT_ADMIN_PASSWORD = "edc25610731"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
 ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 MAIL_TO = "we25266855@gmail.com"
+MAIL_LOG_PATH = os.path.join(BASE_DIR, "mail.log")
 
 
 def load_env_file():
@@ -89,6 +90,12 @@ def mail_settings():
     }
 
 
+def log_mail_error(message):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with open(MAIL_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {message}\n")
+
+
 def send_member_apply_notification(*, name, email, phone, account, created_at):
     settings = mail_settings()
     if not settings["username"] or not settings["password"]:
@@ -112,8 +119,10 @@ def send_member_apply_notification(*, name, email, phone, account, created_at):
     )
 
     with smtplib.SMTP(settings["server"], settings["port"], timeout=15) as smtp:
+        smtp.ehlo()
         if settings["use_tls"]:
             smtp.starttls()
+            smtp.ehlo()
         smtp.login(settings["username"], settings["password"])
         smtp.send_message(message)
 
@@ -564,7 +573,8 @@ class App(BaseHTTPRequestHandler):
                 account=username,
                 created_at=created_at,
             )
-        except Exception:
+        except Exception as exc:
+            log_mail_error(f"{type(exc).__name__}: {exc}")
             traceback.print_exc()
         return self.json({"ok": True, "message": "申請成功"})
     def login(self):
