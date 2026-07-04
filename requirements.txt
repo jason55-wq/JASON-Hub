@@ -1,1 +1,2 @@
-# This project only uses Python standard library modules.
+# This project mainly uses Python standard library modules.
+Flask-Mail

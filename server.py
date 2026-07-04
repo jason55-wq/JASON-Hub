@@ -1,4 +1,6 @@
 ﻿import base64
+import smtplib
+from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, unquote
 import hashlib
@@ -21,6 +23,26 @@ DEFAULT_ADMIN_USERNAME = "we252668"
 DEFAULT_ADMIN_PASSWORD = "edc25610731"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
 ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
+MAIL_TO = "we25266855@gmail.com"
+
+
+def load_env_file():
+    env_path = os.path.join(BASE_DIR, ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_env_file()
 
 
 def db():
@@ -55,6 +77,45 @@ def public_user(row):
     user.pop("password_hash", None)
     return user
 
+
+
+def mail_settings():
+    return {
+        "server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
+        "port": int(os.getenv("MAIL_PORT", "587")),
+        "use_tls": os.getenv("MAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"},
+        "username": os.getenv("MAIL_USERNAME"),
+        "password": os.getenv("MAIL_PASSWORD"),
+    }
+
+
+def send_member_apply_notification(*, name, email, phone, account, created_at):
+    settings = mail_settings()
+    if not settings["username"] or not settings["password"]:
+        raise RuntimeError("MAIL_USERNAME 或 MAIL_PASSWORD 未設定")
+
+    message = EmailMessage()
+    message["Subject"] = "【會員網站】有新的會員申請"
+    message["From"] = settings["username"]
+    message["To"] = MAIL_TO
+    message.set_content(
+        "\n".join(
+            [
+                "有新的會員申請：",
+                f"姓名：{name}",
+                f"Email：{email}",
+                f"電話：{phone}",
+                f"帳號：{account}",
+                f"申請時間：{created_at}",
+            ]
+        )
+    )
+
+    with smtplib.SMTP(settings["server"], settings["port"], timeout=15) as smtp:
+        if settings["use_tls"]:
+            smtp.starttls()
+        smtp.login(settings["username"], settings["password"])
+        smtp.send_message(message)
 
 def load_seed_products():
     if not os.path.exists(PRODUCTS_JSON_PATH):
@@ -484,15 +545,28 @@ class App(BaseHTTPRequestHandler):
         username = data.get("username", "").strip()
         email = data.get("email", "").strip()
         password = data.get("password", "")
+        name = data.get("name", "").strip() or data.get("full_name", "").strip() or username
+        phone = data.get("phone", "").strip() or "未提供"
         if len(username) < 3 or "@" not in email or len(password) < 6:
             raise ValueError("請輸入至少 3 字元帳號、正確 Email，以及至少 6 字元密碼")
         with db() as con:
-            con.execute(
+            cur = con.execute(
                 "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
                 (username, email, hash_password(password)),
             )
+            created_row = con.execute("SELECT created_at FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+            created_at = created_row["created_at"] if created_row else time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            send_member_apply_notification(
+                name=name,
+                email=email,
+                phone=phone,
+                account=username,
+                created_at=created_at,
+            )
+        except Exception:
+            traceback.print_exc()
         return self.json({"ok": True, "message": "申請成功"})
-
     def login(self):
         data = self.read_json()
         username = data.get("username", "").strip()
