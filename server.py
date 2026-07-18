@@ -55,7 +55,7 @@ AT1_PRODUCTS = (
         "/image/AT1/未命名.png",
     ),
     (
-        "AT1硬體",
+        "AT1 硬體 包含 AT1筆記本",
         "硬體",
         AT1_DESCRIPTION,
         1300,
@@ -404,6 +404,15 @@ def init_db():
                 """,
                 (*NOTE_PRODUCT, note_exists["id"]),
             )
+
+        con.execute(
+            "UPDATE products SET name = ? WHERE name = ?",
+            ("AT1筆記本（偉客多工作室出版）", "AT1 筆記本（偉客多工作室出版）"),
+        )
+        con.execute(
+            "UPDATE products SET name = ? WHERE name IN (?, ?)",
+            ("AT1 硬體 包含 AT1筆記本", "AT1硬體", "AT1 硬體"),
+        )
 
         for product in AT1_PRODUCTS:
             product_exists = con.execute(
