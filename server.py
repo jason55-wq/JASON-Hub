@@ -38,6 +38,34 @@ NOTE_PRODUCT = (
     "/static/精華筆記V1(預覽).pdf",
     "/image/notebook/未命名.jpg",
 )
+AT1_DESCRIPTION = (
+    "AT1 聲控平台結合 Arduino、藍牙、語音控制與接近感應技術，帶你快速完成專題製作與智慧控制應用。"
+    "內含完整程式、電路教學與實作範例，適合學生學習、DIY 愛好者及求職作品製作。"
+)
+AT1_PRODUCTS = (
+    (
+        "AT1筆記本（偉客多工作室出版）",
+        "筆記本",
+        AT1_DESCRIPTION,
+        400,
+        30,
+        "active",
+        1,
+        "/static/XAT1 上架資料.pdf",
+        "/image/AT1/未命名.png",
+    ),
+    (
+        "AT1硬體",
+        "硬體",
+        AT1_DESCRIPTION,
+        1300,
+        30,
+        "active",
+        1,
+        "",
+        "/image/AT1/未命名.png",
+    ),
+)
 
 
 def log_notification_error(message):
@@ -354,8 +382,8 @@ def init_db():
             )
 
         note_exists = con.execute(
-            "SELECT id FROM products WHERE category = ? LIMIT 1",
-            (NOTE_PRODUCT[1],),
+            "SELECT id FROM products WHERE name = ? LIMIT 1",
+            (NOTE_PRODUCT[0],),
         ).fetchone()
         if not note_exists:
             con.execute(
@@ -372,10 +400,25 @@ def init_db():
                 UPDATE products
                 SET name = ?, category = ?, description = ?, price = ?, stock = ?, status = ?, featured = ?,
                     preview_url = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE category = ?
+                WHERE id = ?
                 """,
-                (*NOTE_PRODUCT, NOTE_PRODUCT[1]),
+                (*NOTE_PRODUCT, note_exists["id"]),
             )
+
+        for product in AT1_PRODUCTS:
+            product_exists = con.execute(
+                "SELECT id FROM products WHERE name = ? LIMIT 1",
+                (product[0],),
+            ).fetchone()
+            if not product_exists:
+                con.execute(
+                    """
+                    INSERT INTO products
+                    (name, category, description, price, stock, status, featured, preview_url, image_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    product,
+                )
 
 
 class App(BaseHTTPRequestHandler):
