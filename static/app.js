@@ -103,9 +103,11 @@ function syncChrome() {
   if (heroStatus) {
     heroStatus.textContent = state.user
       ? state.user.status === "approved"
-        ? "會員已通過審核"
+        ? state.user.role === "admin"
+          ? "管理員已登入，可檢視訂單"
+          : "會員已通過審核"
         : "會員待審核"
-      : "登入後可下單";
+      : "可直接下單，不必先登入";
   }
 }
 
@@ -233,15 +235,6 @@ function renderCart() {
 async function checkout(event) {
   event.preventDefault();
   const checkoutForm = event.currentTarget;
-
-  if (!state.user) {
-    notify("請先登入");
-    return;
-  }
-  if (state.user.status !== "approved") {
-    notify("會員尚未通過審核");
-    return;
-  }
   if (!state.cart.length) {
     notify("請先加入商品");
     return;
@@ -280,6 +273,7 @@ async function loadOrders() {
               <div class="panel order-card">
                 <strong>訂單 #${order.id}</strong>
                 <div class="line">
+                  <span class="tag">訂購人：${escapeHtml(order.customer_name || order.username || "")}</span>
                   <span class="tag">審核：${escapeHtml(orderReviewLabel(order.review_status))}</span>
                   <span class="tag">狀態：${escapeHtml(order.status || "")}</span>
                 </div>
@@ -362,6 +356,7 @@ async function loadAdmin() {
                   <span>${money(order.total)}</span>
                 </div>
                 <div class="line">
+                  <span class="tag">訂購人：${escapeHtml(order.customer_name || order.username || "")}</span>
                   <span class="tag">審核：${escapeHtml(orderReviewLabel(order.review_status))}</span>
                   <span class="tag">狀態：${escapeHtml(order.status || "")}</span>
                 </div>
@@ -485,15 +480,7 @@ function bindEvents() {
   if (registerForm) {
     registerForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const form = event.currentTarget;
-      try {
-        const data = Object.fromEntries(new FormData(form));
-        const res = await api("/api/register", { method: "POST", body: JSON.stringify(data) });
-        form.reset();
-        notify(res.message || "註冊成功");
-      } catch (error) {
-        notify(error.message);
-      }
+      notify("目前僅保留管理員帳號，無法註冊新會員");
     });
   }
 }

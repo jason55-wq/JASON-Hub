@@ -175,6 +175,10 @@ def public_user(row):
     return user
 
 
+def default_admin_credentials_match(username, password):
+    return username in {DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_EMAIL} and password == DEFAULT_ADMIN_PASSWORD
+
+
 def load_seed_products():
     if not os.path.exists(PRODUCTS_JSON_PATH):
         return []
@@ -599,35 +603,14 @@ class App(BaseHTTPRequestHandler):
             return self.error(500, f"伺服器錯誤：{exc}")
 
     def register(self):
-        data = self.read_json()
-        username = data.get("username", "").strip()
-        email = data.get("email", "").strip()
-        password = data.get("password", "")
-        name = data.get("name", "").strip() or data.get("full_name", "").strip() or username
-        phone = data.get("phone", "").strip() or "未提供"
-        if len(username) < 3 or "@" not in email or len(password) < 6:
-            raise ValueError("請輸入至少 3 字元帳號、正確 Email，以及至少 6 字元密碼")
-        with db() as con:
-            cur = con.execute(
-                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-                (username, email, hash_password(password)),
-            )
-            created_row = con.execute("SELECT created_at FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
-            created_at = created_row["created_at"] if created_row else time.strftime("%Y-%m-%d %H:%M:%S")
-
-        notify_member_apply(
-            name=name,
-            email=email,
-            phone=phone,
-            account=username,
-            created_at=created_at,
-        )
-        return self.json({"ok": True, "message": "申請成功"})
+        raise ValueError("目前僅保留管理員帳號，無法註冊新會員")
 
     def login(self):
         data = self.read_json()
         username = data.get("username", "").strip()
         password = data.get("password", "")
+        if not default_admin_credentials_match(username, password):
+            return self.error(401, "帳號或密碼錯誤")
         with db() as con:
             user = con.execute("SELECT * FROM users WHERE username = ? OR email = ?", (username, username)).fetchone()
             if not user or not verify_password(password, user["password_hash"]):
@@ -793,23 +776,17 @@ class App(BaseHTTPRequestHandler):
         return self.json({"ok": True})
 
     def list_orders(self):
-        user = self.require_user()
-        if not user:
+        if not self.require_admin():
             return
         with db() as con:
-            if user["role"] == "admin":
-                rows = con.execute(
-                    """
-                    SELECT orders.*, users.username
-                    FROM orders JOIN users ON users.id = orders.user_id
-                    ORDER BY orders.created_at DESC
-                    """
-                ).fetchall()
-            else:
-                rows = con.execute(
-                    "SELECT orders.*, ? AS username FROM orders WHERE user_id = ? ORDER BY created_at DESC",
-                    (user["username"], user["id"]),
-                ).fetchall()
+            rows = con.execute(
+                """
+                SELECT orders.*, COALESCE(users.username, '訪客') AS username
+                FROM orders
+                LEFT JOIN users ON users.id = orders.user_id
+                ORDER BY orders.created_at DESC
+                """
+            ).fetchall()
             orders = []
             for row in rows:
                 order = dict(row)
@@ -824,9 +801,6 @@ class App(BaseHTTPRequestHandler):
         return self.json({"ok": True, "orders": orders})
 
     def create_order(self):
-        user = self.require_user()
-        if not user:
-            return
         data = self.read_json()
         items = data.get("items", [])
         customer_name = data.get("customer_name", "").strip()
@@ -836,6 +810,13 @@ class App(BaseHTTPRequestHandler):
         if not items or not customer_name or not phone or not address:
             raise ValueError("請填寫收件資料並選擇商品")
         with db() as con:
+            admin = con.execute(
+                "SELECT id FROM users WHERE username = ? OR email = ? ORDER BY id ASC LIMIT 1",
+                (DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_EMAIL),
+            ).fetchone()
+            if not admin:
+                raise ValueError("管理員帳號不存在")
+            user = self.current_user()
             total = 0
             order_items = []
             for item in items:
@@ -852,12 +833,16 @@ class App(BaseHTTPRequestHandler):
                 total += subtotal
                 order_items.append((product, quantity, subtotal))
 
+            user_id = admin["id"]
+            if user and user.get("role") == "admin" and user.get("status") == "approved":
+                user_id = user["id"]
+
             cur = con.execute(
                 """
                 INSERT INTO orders (user_id, customer_name, phone, address, note, total, review_status)
                 VALUES (?, ?, ?, ?, ?, ?, 'pending')
                 """,
-                (user["id"], customer_name, phone, address, note, total),
+                (user_id, customer_name, phone, address, note, total),
             )
             order_id = cur.lastrowid
             for product, quantity, subtotal in order_items:
