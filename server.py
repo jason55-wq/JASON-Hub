@@ -29,14 +29,7 @@ NOTE_PRODUCT = (
     "傑生工程筆記本",
     "筆記本",
     (
-        "這本精華筆記整理了 AI 工具在開發流程中的實戰用法，"
-        "從 ChatGPT、GitHub Copilot 到 Codex 的分工開始，說明它們各自適合的情境。\n\n"
-        "內容包含：ChatGPT 用來查詢專業知識、學習程式設計觀念與解決操作問題；"
-        "GitHub Copilot 協助閱讀專案架構、分析程式流程並提升開發效率；"
-        "Codex 則聚焦在硬體整合、嵌入式系統、IoT 應用與網頁程式開發。\n\n"
-        "筆記中也收錄了實際提示詞與應用案例，例如新增部落格連結功能、"
-        "用 ChatGPT 繪製 8051 接 LED 原理圖、畫出 ESP32 接 LED 原理圖，"
-        "以及用 GitHub Copilot 讀懂專案內容，適合想把 AI 真正用進開發流程的人。"
+        "整理 ChatGPT、Copilot、Codex 與 Git/GitHub 的實戰重點，適合初學者快速上手 AI 開發與版本控制。"
     ),
     600,
     30,
