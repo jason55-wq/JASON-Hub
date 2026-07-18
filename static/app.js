@@ -42,6 +42,19 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function excerpt(value, length = 140) {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= length) return text;
+  return `${text.slice(0, length - 1)}…`;
+}
+
+function openPreview(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noreferrer");
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     credentials: "same-origin",
@@ -165,7 +178,50 @@ function renderReadContent() {
     </article>
   `;
 
-  wrap.innerHTML = state.readMode === "product" ? "" : projectContent;
+  if (state.readMode === "product") {
+    const products = state.products.filter((product) => product.status === "active");
+    wrap.innerHTML = products.length
+      ? `
+        <div class="product-grid">
+          ${products
+            .map((product) => {
+              const previewUrl = product.preview_url || "";
+              const description = escapeHtml(excerpt(product.description, 180)).replaceAll("\n", "<br>");
+              const imageUrl = product.image_url || DEFAULT_PRODUCT_IMAGE;
+              return `
+                <article class="product-card">
+                  <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+                  <div class="product-body">
+                    <div class="product-meta">
+                      <span class="tag">${escapeHtml(product.category || "工作室選品")}</span>
+                      <strong class="price">${money(product.price)}</strong>
+                    </div>
+                    <h3>${escapeHtml(product.name)}</h3>
+                    <p class="hint">${description}</p>
+                    <div class="product-meta">
+                      <span class="tag">庫存 ${Number(product.stock || 0).toLocaleString("zh-TW")}</span>
+                      ${previewUrl ? `<span class="tag">PDF 預覽</span>` : ""}
+                    </div>
+                    <div class="table-actions">
+                      <button type="button" class="primary" onclick="addToCart(${product.id})">加入購物車</button>
+                      ${
+                        previewUrl
+                          ? `<a class="preview-link" href="${escapeHtml(previewUrl)}" target="_blank" rel="noreferrer">預覽 PDF</a>`
+                          : ""
+                      }
+                    </div>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")}
+        </div>
+      `
+      : `<p class="hint">目前沒有可販售的商品。</p>`;
+    return;
+  }
+
+  wrap.innerHTML = projectContent;
 }
 
 function addToCart(productId) {
@@ -476,13 +532,6 @@ function bindEvents() {
     });
   }
 
-  const registerForm = $("#registerForm");
-  if (registerForm) {
-    registerForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      notify("目前僅保留管理員帳號，無法註冊新會員");
-    });
-  }
 }
 
 async function init() {
@@ -515,6 +564,7 @@ async function init() {
 window.addToCart = addToCart;
 window.changeQty = changeQty;
 window.removeFromCart = removeFromCart;
+window.openPreview = openPreview;
 
 init().catch((error) => notify(error.message));
 

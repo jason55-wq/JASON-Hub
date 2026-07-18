@@ -25,6 +25,26 @@ DEFAULT_ADMIN_PASSWORD = "edc25610731"
 DEFAULT_ADMIN_EMAIL = "123@studio.local"
 ORDER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 MAIL_LOG_PATH = os.path.join(BASE_DIR, "mail.log")
+NOTE_PRODUCT = (
+    "傑生工程筆記本",
+    "筆記本",
+    (
+        "這本精華筆記整理了 AI 工具在開發流程中的實戰用法，"
+        "從 ChatGPT、GitHub Copilot 到 Codex 的分工開始，說明它們各自適合的情境。\n\n"
+        "內容包含：ChatGPT 用來查詢專業知識、學習程式設計觀念與解決操作問題；"
+        "GitHub Copilot 協助閱讀專案架構、分析程式流程並提升開發效率；"
+        "Codex 則聚焦在硬體整合、嵌入式系統、IoT 應用與網頁程式開發。\n\n"
+        "筆記中也收錄了實際提示詞與應用案例，例如新增部落格連結功能、"
+        "用 ChatGPT 繪製 8051 接 LED 原理圖、畫出 ESP32 接 LED 原理圖，"
+        "以及用 GitHub Copilot 讀懂專案內容，適合想把 AI 真正用進開發流程的人。"
+    ),
+    600,
+    30,
+    "active",
+    1,
+    "/static/精華筆記V1(預覽).pdf",
+    "/image/notebook/未命名.jpg",
+)
 
 
 def log_notification_error(message):
@@ -121,7 +141,7 @@ def send_gmail_member_apply_notification(*, name, email, phone, account, created
 
 
 def notify_member_apply(*, name, email, phone, account, created_at):
-    # Discord 優先；Gmail 保留。任何通知失敗都不影響會員註冊成功。
+    # Discord 優先；Gmail 保留。任何通知失敗都不影響其他流程。
     try:
         send_discord_member_apply_notification(
             name=name, email=email, phone=phone, account=account, created_at=created_at
@@ -199,6 +219,8 @@ def load_seed_products():
                 int(item.get("stock", 0)),
                 item.get("status", "draft"),
                 1 if item.get("featured") else 0,
+                item.get("preview_url", "").strip(),
+                item.get("image_url", "").strip(),
             )
         )
     return products
@@ -269,6 +291,8 @@ def init_db():
                 stock INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'draft',
                 featured INTEGER NOT NULL DEFAULT 0,
+                preview_url TEXT NOT NULL DEFAULT '',
+                image_url TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -310,6 +334,14 @@ def init_db():
         }
         if "review_status" not in order_columns:
             con.execute("ALTER TABLE orders ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'")
+        product_columns = {
+            row["name"]
+            for row in con.execute("PRAGMA table_info(products)").fetchall()
+        }
+        if "preview_url" not in product_columns:
+            con.execute("ALTER TABLE products ADD COLUMN preview_url TEXT NOT NULL DEFAULT ''")
+        if "image_url" not in product_columns:
+            con.execute("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
 
         ensure_default_admin(con)
 
@@ -322,10 +354,34 @@ def init_db():
             con.executemany(
                 """
                 INSERT INTO products
-                (name, category, description, price, stock, status, featured)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (name, category, description, price, stock, status, featured, preview_url, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 seed_products,
+            )
+
+        note_exists = con.execute(
+            "SELECT id FROM products WHERE category = ? LIMIT 1",
+            (NOTE_PRODUCT[1],),
+        ).fetchone()
+        if not note_exists:
+            con.execute(
+                """
+                INSERT INTO products
+                (name, category, description, price, stock, status, featured, preview_url, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                NOTE_PRODUCT,
+            )
+        else:
+            con.execute(
+                """
+                UPDATE products
+                SET name = ?, category = ?, description = ?, price = ?, stock = ?, status = ?, featured = ?,
+                    preview_url = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE category = ?
+                """,
+                (*NOTE_PRODUCT, NOTE_PRODUCT[1]),
             )
 
 
@@ -369,6 +425,8 @@ class App(BaseHTTPRequestHandler):
                 content_type = "text/css; charset=utf-8"
             elif name.endswith(".js"):
                 content_type = "application/javascript; charset=utf-8"
+            elif name.lower().endswith(".pdf"):
+                content_type = "application/pdf"
             elif name.lower().endswith(".png"):
                 content_type = "image/png"
             elif name.lower().endswith((".jpg", ".jpeg")):
@@ -566,8 +624,6 @@ class App(BaseHTTPRequestHandler):
                 return self.json({"ok": True, "user": self.current_user()})
             if path == "/api/visit-stats" and method == "GET":
                 return self.visit_stats()
-            if path == "/api/register" and method == "POST":
-                return self.register()
             if path == "/api/login" and method == "POST":
                 return self.login()
             if path == "/api/logout" and method == "POST":
@@ -601,9 +657,6 @@ class App(BaseHTTPRequestHandler):
             return self.error(409, "帳號、Email 或資料已存在")
         except Exception as exc:
             return self.error(500, f"伺服器錯誤：{exc}")
-
-    def register(self):
-        raise ValueError("目前僅保留管理員帳號，無法註冊新會員")
 
     def login(self):
         data = self.read_json()
@@ -668,8 +721,8 @@ class App(BaseHTTPRequestHandler):
         with db() as con:
             cur = con.execute(
                 """
-                INSERT INTO products (name, category, description, price, stock, status, featured)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, category, description, price, stock, status, featured, preview_url, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 data,
             )
@@ -684,7 +737,7 @@ class App(BaseHTTPRequestHandler):
                 """
                 UPDATE products
                 SET name = ?, category = ?, description = ?, price = ?, stock = ?,
-                    status = ?, featured = ?, updated_at = CURRENT_TIMESTAMP
+                    status = ?, featured = ?, preview_url = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (*data, product_id),
@@ -721,7 +774,9 @@ class App(BaseHTTPRequestHandler):
             raise ValueError("價格與庫存需為數字")
         if not name or price < 0 or stock < 0:
             raise ValueError("請輸入商品名稱，價格與庫存不可小於 0")
-        return (name, category, description, price, stock, status, featured)
+        preview_url = data.get("preview_url", "").strip()
+        image_url = data.get("image_url", "").strip()
+        return (name, category, description, price, stock, status, featured, preview_url, image_url)
 
     def list_users(self):
         if not self.require_admin():

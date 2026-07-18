@@ -78,6 +78,23 @@ button:hover {
   color: #8f3f21;
 }
 
+.preview-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.preview-link:hover {
+  border-color: var(--accent);
+}
+
 .topbar {
   position: sticky;
   top: 0;
