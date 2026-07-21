@@ -186,6 +186,10 @@ function renderReadContent() {
           ${products
             .map((product) => {
               const previewUrl = product.preview_url || "";
+              const previewUrls = previewUrl ? [previewUrl] : [];
+              if (product.name === "AT1筆記本(精華筆記)") {
+                previewUrls.push("/static/XAT1_VC_GNB部分內容.pdf");
+              }
               const description = escapeHtml(excerpt(product.description, 180)).replaceAll("\n", "<br>");
               const imageUrl = product.image_url || DEFAULT_PRODUCT_IMAGE;
               return `
@@ -200,14 +204,17 @@ function renderReadContent() {
                     <p class="hint">${description}</p>
                     <div class="product-meta">
                       <span class="tag">庫存 ${Number(product.stock || 0).toLocaleString("zh-TW")}</span>
-                      ${previewUrl ? `<span class="tag">PDF 預覽</span>` : ""}
+                      ${previewUrls.length ? `<span class="tag">PDF 預覽</span>` : ""}
                     </div>
                     <div class="table-actions">
                       <button type="button" class="primary" onclick="addToCart(${product.id})">加入購物車</button>
                       ${
-                        previewUrl
-                          ? `<a class="preview-link" href="${escapeHtml(previewUrl)}" target="_blank" rel="noreferrer">預覽 PDF</a>`
-                          : ""
+                        previewUrls
+                          .map(
+                            (url) =>
+                              `<a class="preview-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">預覽 PDF</a>`,
+                          )
+                          .join("")
                       }
                     </div>
                   </div>

@@ -44,7 +44,7 @@ AT1_DESCRIPTION = (
 )
 AT1_PRODUCTS = (
     (
-        "AT1筆記本（偉客多工作室出版）",
+        "AT1筆記本(精華筆記)",
         "筆記本",
         AT1_DESCRIPTION,
         400,
@@ -406,8 +406,12 @@ def init_db():
             )
 
         con.execute(
-            "UPDATE products SET name = ? WHERE name = ?",
-            ("AT1筆記本（偉客多工作室出版）", "AT1 筆記本（偉客多工作室出版）"),
+            "UPDATE products SET name = ? WHERE name IN (?, ?)",
+            (
+                "AT1筆記本(精華筆記)",
+                "AT1筆記本（偉客多工作室出版）",
+                "AT1 筆記本（偉客多工作室出版）",
+            ),
         )
         con.execute(
             "UPDATE products SET name = ? WHERE name IN (?, ?)",
