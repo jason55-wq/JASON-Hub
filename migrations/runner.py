@@ -218,11 +218,37 @@ def migration_004_remove_ecpay_test_product(connection, backend):
     )
 
 
+def migration_005_add_ai_website_note_product(connection, backend):
+    connection.execute(
+        """
+        INSERT INTO products
+        (name, category, description, price, stock, status, featured, preview_url, image_url)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM products WHERE name = ?
+        )
+        """,
+        (
+            "AI架站筆記(精華筆記v1)",
+            "筆記本",
+            "整理 AI 架站的實作重點與精華筆記，協助初學者快速掌握網站規劃、製作與上線流程。",
+            600,
+            30,
+            "active",
+            1,
+            "/static/AI架站(精華筆記-1)預覽.pdf",
+            "/image/notebook/au架站.jpg",
+            "AI架站筆記(精華筆記v1)",
+        ),
+    )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
     (3, "paypal_checkout", migration_003_paypal_checkout),
     (4, "remove_ecpay_test_product", migration_004_remove_ecpay_test_product),
+    (5, "add_ai_website_note_product", migration_005_add_ai_website_note_product),
 )
 
 

@@ -87,8 +87,33 @@ class PersistenceTests(unittest.TestCase):
                 connection.execute(
                     "SELECT COUNT(*) AS count FROM database_migrations"
                 ).fetchone()["count"],
-                4,
+                5,
             )
+
+    def test_ai_website_note_migration_adds_missing_product_without_overwriting(self):
+        server.init_db()
+        with server.db() as connection:
+            product = connection.execute(
+                "SELECT price, stock, status FROM products WHERE name = ?",
+                (server.AI_WEBSITE_NOTE_PRODUCT[0],),
+            ).fetchone()
+            self.assertIsNotNone(product)
+            self.assertEqual(
+                (product["price"], product["stock"], product["status"]),
+                (600, 30, "active"),
+            )
+            connection.execute(
+                "UPDATE products SET price = 777, stock = 2 WHERE name = ?",
+                (server.AI_WEBSITE_NOTE_PRODUCT[0],),
+            )
+
+        server.init_db()
+        with server.db() as connection:
+            product_after = connection.execute(
+                "SELECT price, stock FROM products WHERE name = ?",
+                (server.AI_WEBSITE_NOTE_PRODUCT[0],),
+            ).fetchone()
+            self.assertEqual((product_after["price"], product_after["stock"]), (777, 2))
 
     def test_explicit_seed_is_idempotent_and_does_not_overwrite(self):
         server.init_db()
