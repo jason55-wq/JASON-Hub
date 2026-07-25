@@ -474,6 +474,11 @@ async function loadAdmin() {
                   <span class="tag">審核：${escapeHtml(orderReviewLabel(order.review_status))}</span>
                   <span class="tag">狀態：${escapeHtml(order.status || "")}</span>
                 </div>
+                <div class="line">
+                  <span>聯絡電話：${escapeHtml(order.phone || "未提供")}</span>
+                  <span>地址：${escapeHtml(order.address || "未提供")}</span>
+                </div>
+                <div class="hint">備註：${escapeHtml(order.note || "無")}</div>
                 <div class="table-actions">
                   <button type="button" class="primary" onclick="reviewOrder(${order.id}, 'approved')">通過審核</button>
                   <button type="button" onclick="reviewOrder(${order.id}, 'rejected')">拒絕</button>

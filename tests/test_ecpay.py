@@ -204,10 +204,20 @@ class EcpayIntegrationTests(unittest.TestCase):
             count = con.execute(
                 "SELECT COUNT(*) AS c FROM orders WHERE checkout_token = 'checkout-idempotent'"
             ).fetchone()["c"]
+            buyer = con.execute(
+                """
+                SELECT customer_name, phone, address, note
+                FROM orders WHERE checkout_token = 'checkout-idempotent'
+                """
+            ).fetchone()
             stock = con.execute(
                 "SELECT stock FROM products WHERE id = ?", (self.product_id,)
             ).fetchone()["stock"]
         self.assertEqual(count, 1)
+        self.assertEqual(
+            tuple(buyer),
+            ("測試顧客", "0900000000", "測試地址", ""),
+        )
         self.assertEqual(stock, 10)
 
     def test_02b_empty_missing_product_and_insufficient_stock(self):
