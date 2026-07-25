@@ -1,3 +1,4 @@
+import gc
 import json
 import os
 import tempfile
@@ -81,6 +82,7 @@ class PayPalIntegrationTests(unittest.TestCase):
         cls.thread.join(timeout=5)
         server.DB_PATH = cls.original_db_path
         cls.environment.stop()
+        gc.collect()
         cls.temp_dir.cleanup()
 
     def request(self, path, method="GET", payload=None, token=None, headers=None):

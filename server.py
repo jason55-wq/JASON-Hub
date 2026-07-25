@@ -762,7 +762,7 @@ class App(BaseHTTPRequestHandler):
                 INSERT INTO site_stats (key, value)
                 VALUES ('home_visits', 1)
                 ON CONFLICT(key) DO UPDATE SET
-                    value = value + 1,
+                    value = site_stats.value + 1,
                     updated_at = CURRENT_TIMESTAMP
                 """
             )
