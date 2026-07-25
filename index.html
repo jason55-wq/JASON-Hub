@@ -130,7 +130,9 @@
           <label>地址<input name="address" required></label>
           <label>備註<textarea name="note" rows="3"></textarea></label>
           <div class="total">總計 <strong id="cartTotal">NT$0</strong></div>
-          <button class="primary">送出資料</button>
+          <button id="manualCheckoutBtn" class="primary">送出資料</button>
+          <button id="ecpayCheckoutBtn" type="button" class="primary">信用卡付款／前往綠界付款</button>
+          <p id="paymentHint" class="hint">信用卡資料將在綠界安全付款頁面輸入。</p>
         </form>
       </div>
     </aside>

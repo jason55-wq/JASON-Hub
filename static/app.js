@@ -303,14 +303,7 @@ async function checkout(event) {
     return;
   }
 
-  const form = new FormData(checkoutForm);
-  const payload = {
-    items: state.cart,
-    customer_name: String(form.get("customer_name") || "").trim(),
-    phone: String(form.get("phone") || "").trim(),
-    address: String(form.get("address") || "").trim(),
-    note: String(form.get("note") || "").trim(),
-  };
+  const payload = checkoutPayload(checkoutForm);
 
   try {
     await api("/api/orders", { method: "POST", body: JSON.stringify(payload) });
@@ -319,6 +312,64 @@ async function checkout(event) {
     checkoutForm.reset();
     notify("訂單已送出");
   } catch (error) {
+    notify(error.message);
+  }
+}
+
+function checkoutPayload(checkoutForm) {
+  const form = new FormData(checkoutForm);
+  return {
+    items: state.cart,
+    customer_name: String(form.get("customer_name") || "").trim(),
+    phone: String(form.get("phone") || "").trim(),
+    address: String(form.get("address") || "").trim(),
+    note: String(form.get("note") || "").trim(),
+  };
+}
+
+async function checkoutWithEcpay() {
+  const checkoutForm = $("#checkoutForm");
+  const button = $("#ecpayCheckoutBtn");
+  const hint = $("#paymentHint");
+  if (!checkoutForm || !button) return;
+  if (!state.cart.length) {
+    notify("請先加入商品");
+    return;
+  }
+  if (!checkoutForm.reportValidity()) return;
+
+  button.disabled = true;
+  button.textContent = "正在前往付款頁面";
+  if (hint) hint.textContent = "正在安全連線至綠界，請勿重複點擊或關閉頁面。";
+  const checkoutToken =
+    window.crypto?.randomUUID?.() ||
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    const result = await api("/api/ecpay/checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        ...checkoutPayload(checkoutForm),
+        checkout_token: checkoutToken,
+      }),
+    });
+    const paymentForm = document.createElement("form");
+    paymentForm.method = "POST";
+    paymentForm.action = result.payment_url;
+    Object.entries(result.parameters || {}).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = String(value);
+      paymentForm.appendChild(input);
+    });
+    document.body.appendChild(paymentForm);
+    state.cart = [];
+    saveCart();
+    paymentForm.submit();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "信用卡付款／前往綠界付款";
+    if (hint) hint.textContent = "信用卡資料將在綠界安全付款頁面輸入。";
     notify(error.message);
   }
 }
@@ -509,6 +560,8 @@ function bindEvents() {
 
   const checkoutForm = $("#checkoutForm");
   if (checkoutForm) checkoutForm.addEventListener("submit", checkout);
+  const ecpayCheckoutBtn = $("#ecpayCheckoutBtn");
+  if (ecpayCheckoutBtn) ecpayCheckoutBtn.addEventListener("click", checkoutWithEcpay);
 
   const logoutBtn = $("#logoutBtn");
   if (logoutBtn) {
