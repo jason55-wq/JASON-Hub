@@ -72,6 +72,17 @@ AT1_PRODUCTS = (
         "/image/AT1/未命名.png",
     ),
 )
+TEST_PRODUCT = (
+    "綠界付款測試商品",
+    "測試商品",
+    "供綠界信用卡付款流程測試使用。",
+    1,
+    100,
+    "active",
+    0,
+    "",
+    "/static/vios.png",
+)
 
 
 def log_notification_error(message):
@@ -569,7 +580,7 @@ def init_db():
             ("AT1 硬體 包含 AT1筆記本", "AT1硬體", "AT1 硬體"),
         )
 
-        for product in AT1_PRODUCTS:
+        for product in (*AT1_PRODUCTS, TEST_PRODUCT):
             product_exists = con.execute(
                 "SELECT id FROM products WHERE name = ? LIMIT 1",
                 (product[0],),
