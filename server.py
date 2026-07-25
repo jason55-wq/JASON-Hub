@@ -76,7 +76,7 @@ TEST_PRODUCT = (
     "綠界付款測試商品",
     "測試商品",
     "供綠界信用卡付款流程測試使用。",
-    1,
+    10,
     100,
     "active",
     0,
@@ -593,6 +593,11 @@ def init_db():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     product,
+                )
+            elif product[0] == TEST_PRODUCT[0]:
+                con.execute(
+                    "UPDATE products SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (TEST_PRODUCT[3], product_exists["id"]),
                 )
 
 
