@@ -1,2 +1,8 @@
 .env
 mail.log
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/backups/
+*.db-wal
+*.db-shm

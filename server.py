@@ -11,9 +11,11 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 import time
 import traceback
+
+import database
+from migrations.runner import run_migrations
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -201,10 +203,13 @@ def notify_member_apply(*, name, email, phone, account, created_at):
 
 
 def db():
-    con = sqlite3.connect(DB_PATH)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys = ON")
-    return con
+    return database.connect(DB_PATH)
+
+
+def insert_and_get_id(connection, sql, parameters=()):
+    if database.database_backend() == "postgresql":
+        return connection.execute(f"{sql.rstrip()} RETURNING id", parameters).fetchone()["id"]
+    return connection.execute(sql, parameters).lastrowid
 
 
 def hash_password(password, salt=None):
@@ -385,202 +390,32 @@ def ensure_default_admin(con):
         """,
         (DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_EMAIL),
     ).fetchone()
-    values = (
-        DEFAULT_ADMIN_USERNAME,
-        DEFAULT_ADMIN_EMAIL,
-        hash_password(DEFAULT_ADMIN_PASSWORD),
-    )
     if admin:
-        con.execute(
-            """
-            UPDATE users
-            SET username = ?, email = ?, password_hash = ?, role = 'admin', status = 'approved'
-            WHERE id = ?
-            """,
-            (*values, admin["id"]),
-        )
-    else:
-        con.execute(
-            """
-            INSERT INTO users (username, email, password_hash, role, status)
-            VALUES (?, ?, ?, 'admin', 'approved')
-            """,
-            values,
-        )
+        return
+    con.execute(
+        """
+        INSERT INTO users (username, email, password_hash, role, status)
+        VALUES (?, ?, ?, 'admin', 'approved')
+        """,
+        (
+            DEFAULT_ADMIN_USERNAME,
+            DEFAULT_ADMIN_EMAIL,
+            hash_password(DEFAULT_ADMIN_PASSWORD),
+        ),
+    )
 
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
+    return run_migrations(DB_PATH)
+
+
+def seed_defaults():
+    """Explicit, idempotent seed command. Never called by application startup."""
+    init_db()
     with db() as con:
-        con.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'member',
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS sessions (
-                token TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                expires_at INTEGER NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                category TEXT NOT NULL DEFAULT '工作室選品',
-                description TEXT NOT NULL DEFAULT '',
-                price INTEGER NOT NULL,
-                stock INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'draft',
-                featured INTEGER NOT NULL DEFAULT 0,
-                preview_url TEXT NOT NULL DEFAULT '',
-                image_url TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                customer_name TEXT NOT NULL,
-                phone TEXT NOT NULL,
-                address TEXT NOT NULL,
-                note TEXT NOT NULL DEFAULT '',
-                total INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'new',
-                review_status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS order_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-                product_id INTEGER NOT NULL REFERENCES products(id),
-                product_name TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                unit_price INTEGER NOT NULL,
-                subtotal INTEGER NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS site_stats (
-                key TEXT PRIMARY KEY,
-                value INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-        )
-
-        order_columns = {
-            row["name"]
-            for row in con.execute("PRAGMA table_info(orders)").fetchall()
-        }
-        if "review_status" not in order_columns:
-            con.execute("ALTER TABLE orders ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'")
-        payment_columns = (
-            ("merchant_trade_no", "TEXT"),
-            ("merchant_trade_date", "TEXT"),
-            ("checkout_token", "TEXT"),
-            ("payment_method", "TEXT NOT NULL DEFAULT 'manual'"),
-            ("payment_status", "TEXT NOT NULL DEFAULT 'pending'"),
-            ("trade_no", "TEXT"),
-            ("ecpay_trade_no", "TEXT"),
-            ("paid_at", "TEXT"),
-            ("payment_amount", "INTEGER"),
-            ("payment_response", "TEXT"),
-            ("payment_error", "TEXT"),
-            ("payment_callback_processed_at", "TEXT"),
-            # 舊流程原本在建單時扣庫存，因此既存訂單 migration 預設為 1。
-            ("inventory_deducted", "INTEGER NOT NULL DEFAULT 1"),
-            ("updated_at", "TEXT"),
-        )
-        for column_name, definition in payment_columns:
-            if column_name not in order_columns:
-                con.execute(f"ALTER TABLE orders ADD COLUMN {column_name} {definition}")
-        con.execute("UPDATE orders SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)")
-        con.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_merchant_trade_no
-            ON orders(merchant_trade_no)
-            WHERE merchant_trade_no IS NOT NULL
-            """
-        )
-        con.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_checkout_token
-            ON orders(checkout_token)
-            WHERE checkout_token IS NOT NULL
-            """
-        )
-        product_columns = {
-            row["name"]
-            for row in con.execute("PRAGMA table_info(products)").fetchall()
-        }
-        if "preview_url" not in product_columns:
-            con.execute("ALTER TABLE products ADD COLUMN preview_url TEXT NOT NULL DEFAULT ''")
-        if "image_url" not in product_columns:
-            con.execute("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
-
         ensure_default_admin(con)
-
-        product_count = con.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
-        order_count = con.execute("SELECT COUNT(*) AS c FROM orders").fetchone()["c"]
-        order_item_count = con.execute("SELECT COUNT(*) AS c FROM order_items").fetchone()["c"]
-        seed_products = load_seed_products()
-        if seed_products and (product_count == 0 or (product_count == 3 and order_count == 0 and order_item_count == 0)):
-            con.execute("DELETE FROM products")
-            con.executemany(
-                """
-                INSERT INTO products
-                (name, category, description, price, stock, status, featured, preview_url, image_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                seed_products,
-            )
-
-        note_exists = con.execute(
-            "SELECT id FROM products WHERE name = ? LIMIT 1",
-            (NOTE_PRODUCT[0],),
-        ).fetchone()
-        if not note_exists:
-            con.execute(
-                """
-                INSERT INTO products
-                (name, category, description, price, stock, status, featured, preview_url, image_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                NOTE_PRODUCT,
-            )
-        else:
-            con.execute(
-                """
-                UPDATE products
-                SET name = ?, category = ?, description = ?, price = ?, stock = ?, status = ?, featured = ?,
-                    preview_url = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (*NOTE_PRODUCT, note_exists["id"]),
-            )
-
-        con.execute(
-            "UPDATE products SET name = ? WHERE name IN (?, ?)",
-            (
-                "AT1筆記本(精華筆記)",
-                "AT1筆記本（偉客多工作室出版）",
-                "AT1 筆記本（偉客多工作室出版）",
-            ),
-        )
-        con.execute(
-            "UPDATE products SET name = ? WHERE name IN (?, ?)",
-            ("AT1 硬體 包含 AT1筆記本", "AT1硬體", "AT1 硬體"),
-        )
-
-        for product in (*AT1_PRODUCTS, TEST_PRODUCT):
+        for product in (*load_seed_products(), NOTE_PRODUCT, *AT1_PRODUCTS, TEST_PRODUCT):
             product_exists = con.execute(
                 "SELECT id FROM products WHERE name = ? LIMIT 1",
                 (product[0],),
@@ -593,11 +428,6 @@ def init_db():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     product,
-                )
-            elif product[0] == TEST_PRODUCT[0]:
-                con.execute(
-                    "UPDATE products SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (TEST_PRODUCT[3], product_exists["id"]),
                 )
 
 
@@ -895,9 +725,9 @@ class App(BaseHTTPRequestHandler):
             return self.error(404, "API 不存在")
         except ValueError as exc:
             return self.error(400, str(exc))
-        except sqlite3.IntegrityError:
-            return self.error(409, "帳號、Email 或資料已存在")
         except Exception as exc:
+            if database.is_integrity_error(exc):
+                return self.error(409, "帳號、Email 或資料已存在")
             return self.error(500, f"伺服器錯誤：{exc}")
 
     def login(self):
@@ -961,14 +791,15 @@ class App(BaseHTTPRequestHandler):
             return
         data = self.product_payload()
         with db() as con:
-            cur = con.execute(
+            product_id = insert_and_get_id(
+                con,
                 """
                 INSERT INTO products (name, category, description, price, stock, status, featured, preview_url, image_url)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 data,
             )
-        return self.json({"ok": True, "id": cur.lastrowid})
+        return self.json({"ok": True, "id": product_id})
 
     def update_product(self, product_id):
         if not self.require_admin():
@@ -1134,7 +965,8 @@ class App(BaseHTTPRequestHandler):
             if user and user.get("role") == "admin" and user.get("status") == "approved":
                 user_id = user["id"]
 
-            cur = con.execute(
+            order_id = insert_and_get_id(
+                con,
                 """
                 INSERT INTO orders
                 (user_id, customer_name, phone, address, note, total, review_status,
@@ -1143,7 +975,6 @@ class App(BaseHTTPRequestHandler):
                 """,
                 (user_id, customer_name, phone, address, note, total, total),
             )
-            order_id = cur.lastrowid
             for product, quantity, subtotal in order_items:
                 con.execute(
                     """
@@ -1227,7 +1058,8 @@ class App(BaseHTTPRequestHandler):
                         break
                 else:
                     raise RuntimeError("無法產生唯一綠界訂單編號")
-                cur = con.execute(
+                order_id = insert_and_get_id(
+                    con,
                     """
                     INSERT INTO orders
                     (user_id, customer_name, phone, address, note, total, status, review_status,
@@ -1249,7 +1081,6 @@ class App(BaseHTTPRequestHandler):
                         total,
                     ),
                 )
-                order_id = cur.lastrowid
                 order_items = []
                 for product, quantity, subtotal in checked_items:
                     con.execute(

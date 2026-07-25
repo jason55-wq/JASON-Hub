@@ -31,6 +31,7 @@ class EcpayIntegrationTests(unittest.TestCase):
         cls.original_environment = {key: os.environ.get(key) for key in cls.environment}
         os.environ.update(cls.environment)
         server.init_db()
+        server.seed_defaults()
         with server.db() as con:
             con.execute(
                 """
