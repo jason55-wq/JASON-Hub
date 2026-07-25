@@ -55,6 +55,17 @@ NOTE_PRODUCT = (
     "/static/精華筆記V1(預覽).pdf",
     "/image/notebook/未命名.jpg",
 )
+AI_WEBSITE_NOTE_PRODUCT = (
+    "AI架站筆記(精華筆記v1)",
+    "筆記本",
+    "整理 AI 架站的實作重點與精華筆記，協助初學者快速掌握網站規劃、製作與上線流程。",
+    600,
+    30,
+    "active",
+    1,
+    "/static/AI架站(精華筆記-1)預覽.pdf",
+    "/image/notebook/au架站.jpg",
+)
 AT1_DESCRIPTION = (
     "AT1 聲控平台結合 Arduino、藍牙、語音控制與接近感應技術，帶你快速完成專題製作與智慧控制應用。"
     "內含完整程式、電路教學與實作範例，適合學生學習、DIY 愛好者及求職作品製作。"
@@ -583,7 +594,13 @@ def seed_defaults():
     init_db()
     with db() as con:
         ensure_default_admin(con)
-        for product in (*load_seed_products(), NOTE_PRODUCT, *AT1_PRODUCTS, TEST_PRODUCT):
+        for product in (
+            *load_seed_products(),
+            NOTE_PRODUCT,
+            AI_WEBSITE_NOTE_PRODUCT,
+            *AT1_PRODUCTS,
+            TEST_PRODUCT,
+        ):
             product_exists = con.execute(
                 "SELECT id FROM products WHERE name = ? LIMIT 1",
                 (product[0],),

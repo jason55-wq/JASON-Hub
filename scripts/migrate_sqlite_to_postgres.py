@@ -32,7 +32,6 @@ TABLE_ORDER = (
     "payments",
     "paypal_webhook_events",
     "site_stats",
-    "sessions",
 )
 SEQUENCE_TABLES = {
     "users",
@@ -239,6 +238,7 @@ def build_plan(source, target):
 def print_plan(plan):
     print("Migration plan (no writes have occurred)")
     print("=" * 72)
+    print("sessions: skipped by policy")
     for item in plan:
         print(
             f"{item['table']}: source={item['source_count']}, "
