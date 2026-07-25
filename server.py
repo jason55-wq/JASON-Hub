@@ -2,7 +2,9 @@
 import html
 import smtplib
 import urllib.request
+import urllib.error
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote_plus, urlparse, unquote
@@ -32,6 +34,13 @@ ECPAY_STAGE_URL = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5"
 ECPAY_PRODUCTION_URL = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5"
 # 綠界官方公開測試特店編號；只用於避免誤把測試帳號送往正式 API。
 ECPAY_TEST_MERCHANT_IDS = frozenset({"2000132", "2000214", "2000933", "3002607"})
+PAYPAL_SANDBOX_API = "https://api-m.sandbox.paypal.com"
+PAYPAL_LIVE_API = "https://api-m.paypal.com"
+PAYPAL_WEBHOOK_EVENTS = {
+    "PAYMENT.CAPTURE.COMPLETED",
+    "PAYMENT.CAPTURE.DENIED",
+    "PAYMENT.CAPTURE.REFUNDED",
+}
 MAIL_LOG_PATH = os.path.join(BASE_DIR, "mail.log")
 NOTE_PRODUCT = (
     "傑生工程筆記本",
@@ -340,6 +349,165 @@ def safe_payment_response(parameters):
     )
 
 
+def log_payment_event(message):
+    safe = str(message).replace("\r", " ").replace("\n", " ")[:500]
+    print(f"[payment] {safe}")
+
+
+def paypal_settings(require_enabled=True):
+    mode = os.getenv("PAYPAL_MODE", "sandbox").strip().lower()
+    if mode not in {"sandbox", "live"}:
+        raise ValueError("PAYPAL_MODE 必須是 sandbox 或 live")
+    currency = os.getenv("PAYPAL_CURRENCY", "USD").strip().upper()
+    if len(currency) != 3 or not currency.isalpha() or not currency.isascii():
+        raise ValueError("PAYPAL_CURRENCY 格式不正確")
+    settings = {
+        "client_id": os.getenv("PAYPAL_CLIENT_ID", "").strip(),
+        "client_secret": os.getenv("PAYPAL_CLIENT_SECRET", "").strip(),
+        "mode": mode,
+        "currency": currency,
+        "webhook_id": os.getenv("PAYPAL_WEBHOOK_ID", "").strip(),
+        "base_url": os.getenv("BASE_URL", "").strip().rstrip("/"),
+        "api_base": PAYPAL_LIVE_API if mode == "live" else PAYPAL_SANDBOX_API,
+        "timeout": float(os.getenv("PAYPAL_TIMEOUT_SECONDS", "15")),
+    }
+    missing = [
+        name
+        for name, value in (
+            ("PAYPAL_CLIENT_ID", settings["client_id"]),
+            ("PAYPAL_CLIENT_SECRET", settings["client_secret"]),
+            ("PAYPAL_WEBHOOK_ID", settings["webhook_id"]),
+            ("BASE_URL", settings["base_url"]),
+        )
+        if not value
+    ]
+    if currency != "TWD":
+        rate_text = os.getenv("PAYPAL_TWD_PER_USD", "").strip()
+        if not rate_text:
+            missing.append("PAYPAL_TWD_PER_USD")
+        else:
+            try:
+                settings["twd_per_currency"] = Decimal(rate_text)
+            except InvalidOperation:
+                raise ValueError("PAYPAL_TWD_PER_USD 必須是有效數字")
+            if settings["twd_per_currency"] <= 0:
+                raise ValueError("PAYPAL_TWD_PER_USD 必須大於 0")
+    else:
+        settings["twd_per_currency"] = Decimal("1")
+    if missing and require_enabled:
+        raise ValueError(f"PayPal 尚未設定完成：{', '.join(missing)}")
+    settings["enabled"] = not missing
+    if settings["base_url"] and not (
+        settings["base_url"].startswith("https://")
+        or (
+            mode == "sandbox"
+            and settings["base_url"].startswith(("http://127.0.0.1", "http://localhost"))
+        )
+    ):
+        raise ValueError("BASE_URL 必須使用 HTTPS")
+    if settings["timeout"] <= 0 or settings["timeout"] > 60:
+        raise ValueError("PAYPAL_TIMEOUT_SECONDS 必須介於 0 到 60 秒")
+    return settings
+
+
+def paypal_amount_from_twd(total, settings):
+    total_decimal = Decimal(int(total))
+    if settings["currency"] == "TWD":
+        return str(int(total_decimal))
+    return str(
+        (total_decimal / settings["twd_per_currency"]).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    )
+
+
+def paypal_http_request(method, path, settings, payload=None, headers=None, basic_auth=None):
+    request_headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "JASON-Hub-PayPal/1.0",
+        **(headers or {}),
+    }
+    body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if basic_auth:
+        encoded = base64.b64encode(f"{basic_auth[0]}:{basic_auth[1]}".encode()).decode()
+        request_headers["Authorization"] = f"Basic {encoded}"
+    request = urllib.request.Request(
+        settings["api_base"] + path,
+        data=body,
+        method=method,
+        headers=request_headers,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=settings["timeout"]) as response:
+            raw = response.read()
+            return json.loads(raw.decode("utf-8")) if raw else {}
+    except urllib.error.HTTPError as exc:
+        debug_id = exc.headers.get("Paypal-Debug-Id", "") if exc.headers else ""
+        log_payment_event(f"PayPal API HTTP {exc.code} debug_id={debug_id[:80]}")
+        raise RuntimeError(f"PayPal API 回應錯誤 ({exc.code})") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        log_payment_event(f"PayPal API unavailable type={type(exc).__name__}")
+        raise RuntimeError("PayPal API 暫時無法連線") from exc
+
+
+def paypal_access_token(settings):
+    form_settings = dict(settings)
+    request_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    encoded = base64.b64encode(
+        f"{settings['client_id']}:{settings['client_secret']}".encode()
+    ).decode()
+    request = urllib.request.Request(
+        settings["api_base"] + "/v1/oauth2/token",
+        data=b"grant_type=client_credentials",
+        method="POST",
+        headers={
+            **request_headers,
+            "Accept": "application/json",
+            "Authorization": f"Basic {encoded}",
+            "User-Agent": "JASON-Hub-PayPal/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=form_settings["timeout"]) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        log_payment_event(f"PayPal OAuth HTTP {exc.code}")
+        raise RuntimeError("PayPal 驗證失敗") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        log_payment_event(f"PayPal OAuth unavailable type={type(exc).__name__}")
+        raise RuntimeError("PayPal API 暫時無法連線") from exc
+    token = result.get("access_token")
+    if not token:
+        raise RuntimeError("PayPal 無法取得存取權杖")
+    return token
+
+
+def paypal_api_request(method, path, settings, payload=None, request_id=None):
+    token = paypal_access_token(settings)
+    headers = {"Authorization": f"Bearer {token}", "Prefer": "return=representation"}
+    if request_id:
+        headers["PayPal-Request-Id"] = request_id
+    return paypal_http_request(method, path, settings, payload, headers)
+
+
+def safe_paypal_response(payload):
+    purchase_units = payload.get("purchase_units") or []
+    captures = (
+        purchase_units[0].get("payments", {}).get("captures", [])
+        if purchase_units
+        else []
+    )
+    capture = captures[0] if captures else {}
+    safe = {
+        "id": str(payload.get("id", ""))[:100],
+        "status": str(payload.get("status", ""))[:40],
+        "capture_id": str(capture.get("id", ""))[:100],
+        "capture_status": str(capture.get("status", ""))[:40],
+    }
+    return json.dumps(safe, ensure_ascii=False, sort_keys=True)
+
+
 def public_user(row):
     if not row:
         return None
@@ -463,6 +631,8 @@ class App(BaseHTTPRequestHandler):
             return self.serve_index()
         if parsed.path == "/ecpay/result":
             return self.ecpay_result({})
+        if parsed.path in {"/paypal/success", "/paypal/cancel", "/paypal/failure"}:
+            return self.paypal_result(parsed.path.rsplit("/", 1)[-1], parse_qs(parsed.query))
         if parsed.path.startswith("/static/"):
             name = unquote(parsed.path.replace("/static/", "", 1))
             if ".." in name or name.startswith("/"):
@@ -517,6 +687,8 @@ class App(BaseHTTPRequestHandler):
             return self.ecpay_return()
         if parsed.path == "/ecpay/result":
             return self.ecpay_result(self.read_form())
+        if parsed.path == "/api/paypal/webhook":
+            return self.paypal_webhook()
         if parsed.path.startswith("/api/"):
             return self.handle_api("POST", parsed.path, {})
         return self.error(404, "找不到資源")
@@ -646,12 +818,7 @@ class App(BaseHTTPRequestHandler):
         return self.json({"ok": False, "error": message}, status)
 
     def current_user(self):
-        cookie = self.headers.get("Cookie", "")
-        token = ""
-        for part in cookie.split(";"):
-            if part.strip().startswith("studio_session="):
-                token = part.strip().split("=", 1)[1]
-                break
+        token = self.session_token()
         if not token:
             return None
         now = int(time.time())
@@ -666,6 +833,27 @@ class App(BaseHTTPRequestHandler):
                 (token, now),
             ).fetchone()
         return row_to_dict(row)
+
+    def session_token(self):
+        cookie = self.headers.get("Cookie", "")
+        for part in cookie.split(";"):
+            if part.strip().startswith("studio_session="):
+                return part.strip().split("=", 1)[1]
+        return ""
+
+    def csrf_token(self):
+        token = self.session_token()
+        if not token:
+            return None
+        return hashlib.sha256(f"jason-hub-csrf:{token}".encode()).hexdigest()
+
+    def require_csrf(self):
+        expected = self.csrf_token()
+        received = self.headers.get("X-CSRF-Token", "")
+        if not expected or not hmac.compare_digest(received, expected):
+            self.error(403, "CSRF 驗證失敗，請重新整理頁面後再試")
+            return False
+        return True
 
     def require_user(self):
         user = self.current_user()
@@ -689,7 +877,13 @@ class App(BaseHTTPRequestHandler):
     def handle_api(self, method, path, query):
         try:
             if path == "/api/me" and method == "GET":
-                return self.json({"ok": True, "user": self.current_user()})
+                return self.json(
+                    {
+                        "ok": True,
+                        "user": self.current_user(),
+                        "csrf_token": self.csrf_token(),
+                    }
+                )
             if path == "/api/visit-stats" and method == "GET":
                 return self.visit_stats()
             if path == "/api/login" and method == "POST":
@@ -718,6 +912,12 @@ class App(BaseHTTPRequestHandler):
                 return self.create_ecpay_checkout()
             if path == "/api/ecpay/status" and method == "GET":
                 return self.ecpay_status(query)
+            if path == "/api/paypal/config" and method == "GET":
+                return self.paypal_config()
+            if path == "/api/paypal/orders" and method == "POST":
+                return self.create_paypal_order()
+            if path == "/api/paypal/orders/capture" and method == "POST":
+                return self.capture_paypal_order()
             if path.startswith("/api/orders/") and method == "PUT":
                 return self.update_order(int(path.rsplit("/", 1)[1]))
             if path.startswith("/api/orders/") and method == "DELETE":
@@ -745,7 +945,15 @@ class App(BaseHTTPRequestHandler):
                 "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
                 (token, user["id"], int(time.time()) + SESSION_TTL),
             )
-        cookie = f"studio_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_TTL}"
+        secure = (
+            "; Secure"
+            if database.production_mode() or os.getenv("BASE_URL", "").startswith("https://")
+            else ""
+        )
+        cookie = (
+            f"studio_session={token}; HttpOnly; SameSite=Lax; Path=/; "
+            f"Max-Age={SESSION_TTL}{secure}"
+        )
         body = json.dumps({"ok": True, "user": public_user(user)}, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Set-Cookie", cookie)
@@ -1119,6 +1327,525 @@ class App(BaseHTTPRequestHandler):
             }
         )
 
+    def paypal_config(self):
+        try:
+            settings = paypal_settings(require_enabled=False)
+        except (ValueError, TypeError):
+            settings = {"enabled": False, "client_id": "", "currency": "USD", "mode": "sandbox"}
+        user = self.current_user()
+        enabled = bool(settings.get("enabled") and user and user.get("status") == "approved")
+        message = ""
+        if not settings.get("enabled"):
+            message = "PayPal 國際付款目前尚未設定完成。"
+        elif not user:
+            message = "請先登入後使用 PayPal 國際付款。"
+        elif user.get("status") != "approved":
+            message = "會員通過審核後才能使用 PayPal 國際付款。"
+        return self.json(
+            {
+                "ok": True,
+                "enabled": enabled,
+                "client_id": settings.get("client_id", "") if enabled else "",
+                "currency": settings.get("currency", "USD"),
+                "mode": settings.get("mode", "sandbox"),
+                "message": message,
+            }
+        )
+
+    def paypal_result(self, result, query):
+        labels = {
+            "success": ("付款完成", "PayPal 付款已由伺服器核對完成。"),
+            "cancel": ("已取消付款", "訂單尚未付款，庫存不會因此扣除。"),
+            "failure": ("付款未完成", "付款確認失敗，請返回商店後重試或聯絡客服。"),
+        }
+        title, message = labels.get(result, labels["failure"])
+        order_id = str(query.get("order_id", [""])[0])
+        safe_order = "".join(ch for ch in order_id if ch.isdigit())[:20]
+        summary = f"<p>網站訂單 #{safe_order}</p>" if safe_order else ""
+        content = f"""<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)}｜JASON Hub</title><link rel="stylesheet" href="/static/app.css"></head>
+<body><main><section class="panel payment-result"><p class="eyebrow">PayPal 國際付款</p>
+<h1>{html.escape(title)}</h1><p>{html.escape(message)}</p>{summary}
+<a class="button-link primary" href="/">返回商店</a></section></main></body></html>"""
+        return self.text(content, 200, "text/html; charset=utf-8")
+
+    def create_paypal_order(self):
+        user = self.require_user()
+        if not user:
+            return
+        if not self.require_csrf():
+            return
+        settings = paypal_settings()
+        data = self.read_json()
+        items = data.get("items", [])
+        customer_name = str(data.get("customer_name", "")).strip()
+        phone = str(data.get("phone", "")).strip()
+        address = str(data.get("address", "")).strip()
+        note = str(data.get("note", "")).strip()
+        checkout_token = str(data.get("checkout_token", "")).strip()
+        if not items or not customer_name or not phone or not address:
+            raise ValueError("請填寫收件資料並選擇商品")
+        if not checkout_token or len(checkout_token) > 100:
+            raise ValueError("結帳識別碼無效")
+
+        with db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            existing = con.execute(
+                """
+                SELECT * FROM orders
+                WHERE checkout_token = ? AND payment_method = 'paypal'
+                """,
+                (checkout_token,),
+            ).fetchone()
+            if existing:
+                order = dict(existing)
+                if order["user_id"] != user["id"]:
+                    return self.error(403, "無權操作此訂單")
+                if order["payment_status"] == "paid":
+                    return self.error(409, "此訂單已完成付款")
+            else:
+                quantities = {}
+                for item in items:
+                    product_id = int(item.get("product_id", 0))
+                    quantity = int(item.get("quantity", 0))
+                    if product_id <= 0 or quantity <= 0:
+                        raise ValueError("商品與數量不正確")
+                    quantities[product_id] = quantities.get(product_id, 0) + quantity
+                total = 0
+                checked_items = []
+                for product_id, quantity in quantities.items():
+                    product = con.execute(
+                        "SELECT * FROM products WHERE id = ? AND status = 'active'",
+                        (product_id,),
+                    ).fetchone()
+                    if not product:
+                        raise ValueError("商品不存在或尚未上架")
+                    if product["stock"] < quantity:
+                        raise ValueError(f"{product['name']} 庫存不足")
+                    subtotal = product["price"] * quantity
+                    total += subtotal
+                    checked_items.append((product, quantity, subtotal))
+                paypal_amount = paypal_amount_from_twd(total, settings)
+                request_id = f"paypal-create-{secrets.token_hex(16)}"
+                order_id = insert_and_get_id(
+                    con,
+                    """
+                    INSERT INTO orders
+                    (user_id, customer_name, phone, address, note, total, status,
+                     review_status, checkout_token, payment_method, payment_status,
+                     payment_amount, inventory_deducted, paypal_currency,
+                     paypal_amount, paypal_request_id)
+                    VALUES (?, ?, ?, ?, ?, ?, 'new', 'pending', ?, 'paypal',
+                            'pending', ?, 0, ?, ?, ?)
+                    """,
+                    (
+                        user["id"],
+                        customer_name,
+                        phone,
+                        address,
+                        note,
+                        total,
+                        checkout_token,
+                        total,
+                        settings["currency"],
+                        paypal_amount,
+                        request_id,
+                    ),
+                )
+                invoice_id = f"JASON-{order_id}"
+                con.execute(
+                    "UPDATE orders SET paypal_invoice_id = ? WHERE id = ?",
+                    (invoice_id, order_id),
+                )
+                for product, quantity, subtotal in checked_items:
+                    con.execute(
+                        """
+                        INSERT INTO order_items
+                        (order_id, product_id, product_name, quantity, unit_price, subtotal)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            order_id,
+                            product["id"],
+                            product["name"],
+                            quantity,
+                            product["price"],
+                            subtotal,
+                        ),
+                    )
+                order = dict(con.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone())
+
+        if order.get("paypal_order_id"):
+            return self.json(
+                {
+                    "ok": True,
+                    "order_id": order["paypal_order_id"],
+                    "internal_order_id": order["id"],
+                }
+            )
+        payload = {
+            "intent": "CAPTURE",
+            "purchase_units": [
+                {
+                    "reference_id": str(order["id"]),
+                    "custom_id": str(order["id"]),
+                    "invoice_id": order["paypal_invoice_id"],
+                    "description": f"JASON Hub order #{order['id']}",
+                    "amount": {
+                        "currency_code": order["paypal_currency"],
+                        "value": order["paypal_amount"],
+                    },
+                }
+            ],
+            "payment_source": {
+                "paypal": {
+                    "experience_context": {
+                        "return_url": f"{settings['base_url']}/paypal/success",
+                        "cancel_url": f"{settings['base_url']}/paypal/cancel",
+                        "user_action": "PAY_NOW",
+                    }
+                }
+            },
+        }
+        try:
+            response = paypal_api_request(
+                "POST",
+                "/v2/checkout/orders",
+                settings,
+                payload,
+                order["paypal_request_id"],
+            )
+        except RuntimeError as exc:
+            with db() as con:
+                con.execute(
+                    """
+                    UPDATE orders SET payment_error = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND payment_status != 'paid'
+                    """,
+                    (str(exc)[:200], order["id"]),
+                )
+            log_payment_event(f"create failed order={order['id']} type={type(exc).__name__}")
+            return self.error(503, "PayPal 暫時無法建立付款，請稍後再試")
+        paypal_order_id = str(response.get("id", ""))
+        if not paypal_order_id or response.get("status") not in {"CREATED", "PAYER_ACTION_REQUIRED"}:
+            log_payment_event(f"invalid create response order={order['id']}")
+            return self.error(502, "PayPal 建立付款回應不完整")
+        with db() as con:
+            con.execute(
+                """
+                UPDATE orders SET paypal_order_id = ?, payment_error = NULL,
+                    payment_response = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND paypal_order_id IS NULL
+                """,
+                (paypal_order_id, safe_paypal_response(response), order["id"]),
+            )
+        return self.json(
+            {"ok": True, "order_id": paypal_order_id, "internal_order_id": order["id"]}
+        )
+
+    def _paypal_capture_details(self, response):
+        units = response.get("purchase_units") or []
+        if len(units) != 1:
+            raise ValueError("PayPal 付款內容不完整")
+        unit = units[0]
+        captures = unit.get("payments", {}).get("captures", [])
+        if len(captures) != 1:
+            raise ValueError("PayPal Capture 資料不完整")
+        capture = captures[0]
+        return {
+            "paypal_order_id": str(response.get("id", "")),
+            "order_status": str(response.get("status", "")),
+            "capture_id": str(capture.get("id", "")),
+            "capture_status": str(capture.get("status", "")),
+            "amount": str(capture.get("amount", {}).get("value", "")),
+            "currency": str(capture.get("amount", {}).get("currency_code", "")).upper(),
+            "custom_id": str(capture.get("custom_id") or unit.get("custom_id") or ""),
+            "invoice_id": str(capture.get("invoice_id") or unit.get("invoice_id") or ""),
+        }
+
+    def _finalize_paypal_capture(self, response):
+        details = self._paypal_capture_details(response)
+        if (
+            details["order_status"] != "COMPLETED"
+            or details["capture_status"] != "COMPLETED"
+            or not details["capture_id"]
+        ):
+            raise ValueError("PayPal Capture 尚未完成")
+        try:
+            internal_id = int(details["custom_id"])
+        except (TypeError, ValueError):
+            raise ValueError("PayPal 訂單識別碼不正確")
+        with db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            lock_suffix = " FOR UPDATE" if database.database_backend() == "postgresql" else ""
+            order = con.execute(
+                f"SELECT * FROM orders WHERE id = ?{lock_suffix}", (internal_id,)
+            ).fetchone()
+            if not order or order["payment_method"] != "paypal":
+                raise ValueError("找不到對應的 PayPal 訂單")
+            try:
+                amount_matches = Decimal(order["paypal_amount"]) == Decimal(details["amount"])
+            except (InvalidOperation, TypeError):
+                amount_matches = False
+            if not (
+                order["paypal_order_id"] == details["paypal_order_id"]
+                and order["paypal_invoice_id"] == details["invoice_id"]
+                and amount_matches
+                and order["paypal_currency"] == details["currency"]
+            ):
+                log_payment_event(f"capture mismatch order={internal_id}")
+                raise ValueError("PayPal 付款資料核對失敗")
+            if order["payment_status"] == "paid":
+                if order["paypal_capture_id"] != details["capture_id"]:
+                    raise ValueError("訂單已有不同的 PayPal 交易")
+                return dict(order)
+            duplicate = con.execute(
+                "SELECT id FROM orders WHERE paypal_capture_id = ? AND id != ?",
+                (details["capture_id"], internal_id),
+            ).fetchone()
+            if duplicate:
+                raise ValueError("PayPal 交易已被其他訂單處理")
+            items = con.execute(
+                "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+                (internal_id,),
+            ).fetchall()
+            for item in items:
+                updated = con.execute(
+                    """
+                    UPDATE products
+                    SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND stock >= ?
+                    """,
+                    (item["quantity"], item["product_id"], item["quantity"]),
+                )
+                if updated.rowcount != 1:
+                    raise ValueError("付款完成，但商品庫存不足；請聯絡客服處理退款")
+            updated = con.execute(
+                """
+                UPDATE orders
+                SET status = 'paid', payment_status = 'paid', trade_no = ?,
+                    paypal_capture_id = ?, paid_at = CURRENT_TIMESTAMP,
+                    payment_response = ?, payment_error = NULL,
+                    payment_callback_processed_at = CURRENT_TIMESTAMP,
+                    inventory_deducted = 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND payment_status != 'paid' AND inventory_deducted = 0
+                """,
+                (
+                    details["capture_id"],
+                    details["capture_id"],
+                    safe_paypal_response(response),
+                    internal_id,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise ValueError("PayPal 訂單已被處理")
+            return dict(con.execute("SELECT * FROM orders WHERE id = ?", (internal_id,)).fetchone())
+
+    def capture_paypal_order(self):
+        user = self.require_user()
+        if not user:
+            return
+        if not self.require_csrf():
+            return
+        settings = paypal_settings()
+        paypal_order_id = str(self.read_json().get("order_id", "")).strip()
+        if not paypal_order_id or len(paypal_order_id) > 100:
+            raise ValueError("PayPal Order ID 不正確")
+        with db() as con:
+            order = con.execute(
+                """
+                SELECT * FROM orders
+                WHERE paypal_order_id = ? AND payment_method = 'paypal'
+                """,
+                (paypal_order_id,),
+            ).fetchone()
+            if not order:
+                return self.error(404, "找不到 PayPal 訂單")
+            if order["user_id"] != user["id"]:
+                return self.error(403, "無權操作此訂單")
+            if order["payment_status"] == "paid":
+                return self.json(
+                    {
+                        "ok": True,
+                        "already_processed": True,
+                        "internal_order_id": order["id"],
+                    }
+                )
+            capture_request_id = order["paypal_capture_request_id"]
+            if order["payment_status"] == "cancelled":
+                return self.error(409, "此訂單已取消")
+            stock_error = con.execute(
+                """
+                SELECT 1
+                FROM order_items
+                JOIN products ON products.id = order_items.product_id
+                WHERE order_items.order_id = ? AND products.stock < order_items.quantity
+                LIMIT 1
+                """,
+                (order["id"],),
+            ).fetchone()
+            if stock_error:
+                return self.error(409, "商品庫存不足，無法完成 PayPal 付款")
+            if not capture_request_id:
+                capture_request_id = f"paypal-capture-{secrets.token_hex(16)}"
+                con.execute(
+                    """
+                    UPDATE orders SET paypal_capture_request_id = ?
+                    WHERE id = ? AND paypal_capture_request_id IS NULL
+                    """,
+                    (capture_request_id, order["id"]),
+                )
+        try:
+            response = paypal_api_request(
+                "POST",
+                f"/v2/checkout/orders/{paypal_order_id}/capture",
+                settings,
+                {},
+                capture_request_id,
+            )
+            paid_order = self._finalize_paypal_capture(response)
+        except ValueError as exc:
+            log_payment_event(f"capture rejected order={order['id']} reason={str(exc)[:120]}")
+            with db() as con:
+                con.execute(
+                    """
+                    UPDATE orders SET payment_status = 'failed', payment_error = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND payment_status != 'paid'
+                    """,
+                    (str(exc)[:200], order["id"]),
+                )
+            return self.error(400, str(exc))
+        except RuntimeError as exc:
+            log_payment_event(f"capture unavailable order={order['id']} type={type(exc).__name__}")
+            return self.error(503, "PayPal 暫時無法確認付款，請稍後重試")
+        return self.json(
+            {"ok": True, "internal_order_id": paid_order["id"], "status": "COMPLETED"}
+        )
+
+    def paypal_webhook(self):
+        try:
+            settings = paypal_settings()
+            length = int(self.headers.get("Content-Length", 0))
+            if length <= 0 or length > 1024 * 1024:
+                return self.error(400, "Webhook 內容無效")
+            raw = self.rfile.read(length)
+            event = json.loads(raw.decode("utf-8"))
+            event_id = str(event.get("id", ""))[:200]
+            event_type = str(event.get("event_type", ""))[:100]
+            if not event_id or event_type not in PAYPAL_WEBHOOK_EVENTS:
+                return self.error(400, "不支援的 PayPal webhook event")
+            verification = {
+                "transmission_id": self.headers.get("Paypal-Transmission-Id", ""),
+                "transmission_time": self.headers.get("Paypal-Transmission-Time", ""),
+                "cert_url": self.headers.get("Paypal-Cert-Url", ""),
+                "auth_algo": self.headers.get("Paypal-Auth-Algo", ""),
+                "transmission_sig": self.headers.get("Paypal-Transmission-Sig", ""),
+                "webhook_id": settings["webhook_id"],
+                "webhook_event": event,
+            }
+            if not all(
+                verification[key]
+                for key in (
+                    "transmission_id",
+                    "transmission_time",
+                    "cert_url",
+                    "auth_algo",
+                    "transmission_sig",
+                )
+            ):
+                return self.error(400, "PayPal webhook 簽章標頭不完整")
+            result = paypal_api_request(
+                "POST",
+                "/v1/notifications/verify-webhook-signature",
+                settings,
+                verification,
+            )
+            if result.get("verification_status") != "SUCCESS":
+                log_payment_event(f"webhook signature rejected event={event_id[:80]}")
+                return self.error(400, "PayPal webhook 驗證失敗")
+
+            resource = event.get("resource") or {}
+            resource_id = str(resource.get("id", ""))[:200]
+            with db() as con:
+                existing = con.execute(
+                    "SELECT processing_status FROM paypal_webhook_events WHERE event_id = ?",
+                    (event_id,),
+                ).fetchone()
+                if existing and existing["processing_status"] == "processed":
+                    return self.json({"ok": True, "duplicate": True})
+                if not existing:
+                    con.execute(
+                        """
+                        INSERT INTO paypal_webhook_events
+                        (event_id, event_type, resource_id)
+                        VALUES (?, ?, ?)
+                        """,
+                        (event_id, event_type, resource_id),
+                    )
+
+            if event_type == "PAYMENT.CAPTURE.COMPLETED":
+                order_id = str(
+                    resource.get("supplementary_data", {})
+                    .get("related_ids", {})
+                    .get("order_id", "")
+                )
+                synthetic = {
+                    "id": order_id,
+                    "status": "COMPLETED",
+                    "purchase_units": [
+                        {
+                            "custom_id": resource.get("custom_id"),
+                            "invoice_id": resource.get("invoice_id"),
+                            "payments": {"captures": [resource]},
+                        }
+                    ],
+                }
+                self._finalize_paypal_capture(synthetic)
+            else:
+                with db() as con:
+                    related_capture_id = str(
+                        resource.get("supplementary_data", {})
+                        .get("related_ids", {})
+                        .get("capture_id", "")
+                    )
+                    capture_id = related_capture_id or resource_id
+                    order = con.execute(
+                        "SELECT id, payment_status FROM orders WHERE paypal_capture_id = ?",
+                        (capture_id,),
+                    ).fetchone()
+                    if order:
+                        new_status = (
+                            "refunded"
+                            if event_type == "PAYMENT.CAPTURE.REFUNDED"
+                            else "failed"
+                        )
+                        con.execute(
+                            """
+                            UPDATE orders SET payment_status = ?, payment_error = ?,
+                                payment_callback_processed_at = CURRENT_TIMESTAMP,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ? AND (? = 'refunded' OR payment_status != 'paid')
+                            """,
+                            (new_status, event_type, order["id"], new_status),
+                        )
+            with db() as con:
+                con.execute(
+                    """
+                    UPDATE paypal_webhook_events
+                    SET processing_status = 'processed', processed_at = CURRENT_TIMESTAMP,
+                        error_message = NULL
+                    WHERE event_id = ?
+                    """,
+                    (event_id,),
+                )
+            return self.json({"ok": True})
+        except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            log_payment_event(f"webhook processing failed type={type(exc).__name__}")
+            return self.error(400 if isinstance(exc, (ValueError, json.JSONDecodeError)) else 503,
+                              "PayPal webhook 處理失敗")
+
     def ecpay_return(self):
         try:
             parameters = self.read_form()
@@ -1339,11 +2066,11 @@ if(tradeNo && initialStatus==="pending"){{
             ).fetchone()
             if not order:
                 raise ValueError("找不到訂單資料")
-            if order["payment_method"] == "ecpay_credit" and status == "paid":
-                raise ValueError("綠界訂單只能由通過驗證的付款通知標記為已付款")
+            if order["payment_method"] in {"ecpay_credit", "paypal"} and status == "paid":
+                raise ValueError("線上付款訂單只能由通過驗證的付款結果標記為已付款")
             if status is not None:
                 con.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
-                if order["payment_method"] == "ecpay_credit" and status == "cancelled":
+                if order["payment_method"] in {"ecpay_credit", "paypal"} and status == "cancelled":
                     con.execute(
                         """
                         UPDATE orders

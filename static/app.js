@@ -4,6 +4,8 @@
   cart: loadCart(),
   visitorCount: 0,
   readMode: "project",
+  csrfToken: null,
+  paypalCheckoutToken: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -56,10 +58,12 @@ function openPreview(url) {
 }
 
 async function api(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
   const res = await fetch(path, {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
+      ...(state.csrfToken && method !== "GET" ? { "X-CSRF-Token": state.csrfToken } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -127,6 +131,7 @@ function syncChrome() {
 async function loadMe() {
   const data = await api("/api/me");
   state.user = data.user;
+  state.csrfToken = data.csrf_token || null;
   syncChrome();
 }
 
@@ -374,6 +379,91 @@ async function checkoutWithEcpay() {
   }
 }
 
+function loadPayPalSdk(config) {
+  if (window.paypal) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const params = new URLSearchParams({
+      "client-id": config.client_id,
+      currency: config.currency,
+      intent: "capture",
+      components: "buttons",
+    });
+    script.src = `https://www.paypal.com/sdk/js?${params}`;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("PayPal 付款元件載入失敗"));
+    document.head.appendChild(script);
+  });
+}
+
+async function initPayPal() {
+  const container = $("#paypal-button-container");
+  const hint = $("#paypalHint");
+  if (!container || !hint) return;
+  try {
+    const config = await api("/api/paypal/config");
+    if (!config.enabled) {
+      container.innerHTML = "";
+      hint.textContent = config.message || "PayPal 國際付款目前無法使用。";
+      return;
+    }
+    await loadPayPalSdk(config);
+    hint.textContent = `PayPal 將以 ${config.currency} 收款；金額由伺服器依商品資料重新計算。`;
+    window.paypal
+      .Buttons({
+        style: { layout: "vertical", shape: "rect", label: "paypal" },
+        onClick(_data, actions) {
+          const form = $("#checkoutForm");
+          if (!state.cart.length) {
+            notify("請先加入商品");
+            return actions.reject();
+          }
+          if (!form?.reportValidity()) return actions.reject();
+          return actions.resolve();
+        },
+        async createOrder() {
+          const form = $("#checkoutForm");
+          state.paypalCheckoutToken =
+            state.paypalCheckoutToken ||
+            window.crypto?.randomUUID?.() ||
+            `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const result = await api("/api/paypal/orders", {
+            method: "POST",
+            body: JSON.stringify({
+              ...checkoutPayload(form),
+              checkout_token: state.paypalCheckoutToken,
+            }),
+          });
+          return result.order_id;
+        },
+        async onApprove(data) {
+          hint.textContent = "PayPal 已授權，正在由伺服器核對並完成付款。";
+          const result = await api("/api/paypal/orders/capture", {
+            method: "POST",
+            body: JSON.stringify({ order_id: data.orderID }),
+          });
+          state.cart = [];
+          state.paypalCheckoutToken = null;
+          saveCart();
+          window.location.assign(`/paypal/success?order_id=${encodeURIComponent(result.internal_order_id)}`);
+        },
+        onCancel() {
+          window.location.assign("/paypal/cancel");
+        },
+        onError(error) {
+          console.error("PayPal checkout error", error?.name || "Error");
+          hint.textContent = "PayPal 付款未完成，訂單不會標記為已付款。";
+          notify("PayPal 付款未完成，請稍後再試");
+        },
+      })
+      .render("#paypal-button-container");
+  } catch (error) {
+    container.innerHTML = "";
+    hint.textContent = error.message || "PayPal 國際付款目前無法使用。";
+  }
+}
+
 async function loadOrders() {
   const wrap = $("#ordersList");
   if (!wrap) return;
@@ -575,6 +665,7 @@ function bindEvents() {
         await api("/api/logout", { method: "POST" });
       } catch {}
       state.user = null;
+      state.csrfToken = null;
       syncChrome();
       showView("shop");
     });
@@ -588,6 +679,7 @@ function bindEvents() {
         const data = Object.fromEntries(new FormData(event.currentTarget));
         const res = await api("/api/login", { method: "POST", body: JSON.stringify(data) });
         state.user = res.user;
+        await loadMe();
         syncChrome();
         showView("shop");
         notify("登入成功");
@@ -616,6 +708,7 @@ async function init() {
     if (grid) grid.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
   }
   renderReadContent();
+  await initPayPal();
 
   try {
     await loadVisitStats();

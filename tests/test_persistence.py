@@ -87,7 +87,7 @@ class PersistenceTests(unittest.TestCase):
                 connection.execute(
                     "SELECT COUNT(*) AS count FROM database_migrations"
                 ).fetchone()["count"],
-                2,
+                3,
             )
 
     def test_explicit_seed_is_idempotent_and_does_not_overwrite(self):

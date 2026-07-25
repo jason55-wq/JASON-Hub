@@ -19,6 +19,16 @@ ORDER_PAYMENT_COLUMNS = (
     ("updated_at", "TEXT"),
 )
 
+PAYPAL_ORDER_COLUMNS = (
+    ("paypal_order_id", "TEXT"),
+    ("paypal_capture_id", "TEXT"),
+    ("paypal_invoice_id", "TEXT"),
+    ("paypal_currency", "TEXT"),
+    ("paypal_amount", "TEXT"),
+    ("paypal_request_id", "TEXT"),
+    ("paypal_capture_request_id", "TEXT"),
+)
+
 
 def _id_column(backend):
     return "SERIAL PRIMARY KEY" if backend == "postgresql" else "INTEGER PRIMARY KEY AUTOINCREMENT"
@@ -155,9 +165,41 @@ def migration_002_legacy_columns_and_indexes(connection, backend):
     )
 
 
+def migration_003_paypal_checkout(connection, backend):
+    order_columns = _column_names(connection, backend, "orders")
+    for name, definition in PAYPAL_ORDER_COLUMNS:
+        if name not in order_columns:
+            connection.execute(f"ALTER TABLE orders ADD COLUMN {name} {definition}")
+
+    identifier = _id_column(backend)
+    connection.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS paypal_webhook_events (
+            id {identifier},
+            event_id TEXT NOT NULL UNIQUE,
+            event_type TEXT NOT NULL,
+            resource_id TEXT,
+            processing_status TEXT NOT NULL DEFAULT 'received',
+            error_message TEXT,
+            received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            processed_at TEXT
+        )
+        """
+    )
+    for column in ("paypal_order_id", "paypal_capture_id", "paypal_invoice_id"):
+        connection.execute(
+            f"""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_{column}
+            ON orders({column})
+            WHERE {column} IS NOT NULL
+            """
+        )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
+    (3, "paypal_checkout", migration_003_paypal_checkout),
 )
 
 

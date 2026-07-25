@@ -1,4 +1,8 @@
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 mail.log
 data/*.db
 data/*.sqlite
