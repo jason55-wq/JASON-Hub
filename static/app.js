@@ -679,7 +679,7 @@ function bindEvents() {
         const data = Object.fromEntries(new FormData(event.currentTarget));
         const res = await api("/api/login", { method: "POST", body: JSON.stringify(data) });
         state.user = res.user;
-        await loadMe();
+        state.csrfToken = res.csrf_token || null;
         syncChrome();
         showView("shop");
         notify("登入成功");
@@ -708,7 +708,6 @@ async function init() {
     if (grid) grid.innerHTML = `<p class="hint">${escapeHtml(error.message)}</p>`;
   }
   renderReadContent();
-  await initPayPal();
 
   try {
     await loadVisitStats();
@@ -717,6 +716,7 @@ async function init() {
   }
 
   renderCart();
+  initPayPal();
 }
 
 window.addToCart = addToCart;

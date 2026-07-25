@@ -954,7 +954,15 @@ class App(BaseHTTPRequestHandler):
             f"studio_session={token}; HttpOnly; SameSite=Lax; Path=/; "
             f"Max-Age={SESSION_TTL}{secure}"
         )
-        body = json.dumps({"ok": True, "user": public_user(user)}, ensure_ascii=False).encode("utf-8")
+        csrf_token = hashlib.sha256(f"jason-hub-csrf:{token}".encode()).hexdigest()
+        body = json.dumps(
+            {
+                "ok": True,
+                "user": public_user(user),
+                "csrf_token": csrf_token,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Type", "application/json; charset=utf-8")
