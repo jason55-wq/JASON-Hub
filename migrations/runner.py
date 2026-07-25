@@ -196,10 +196,33 @@ def migration_003_paypal_checkout(connection, backend):
         )
 
 
+def migration_004_remove_ecpay_test_product(connection, backend):
+    name = "綠界付款測試商品"
+    connection.execute(
+        """
+        DELETE FROM products
+        WHERE name = ?
+          AND NOT EXISTS (
+              SELECT 1 FROM order_items WHERE order_items.product_id = products.id
+          )
+        """,
+        (name,),
+    )
+    connection.execute(
+        """
+        UPDATE products
+        SET status = 'archived', updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        (name,),
+    )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
     (3, "paypal_checkout", migration_003_paypal_checkout),
+    (4, "remove_ecpay_test_product", migration_004_remove_ecpay_test_product),
 )
 
 

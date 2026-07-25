@@ -94,19 +94,6 @@ AT1_PRODUCTS = (
         "/image/AT1/未命名.png",
     ),
 )
-TEST_PRODUCT = (
-    "綠界付款測試商品",
-    "測試商品",
-    "供綠界信用卡付款流程測試使用。",
-    10,
-    100,
-    "active",
-    0,
-    "",
-    "/static/vios.png",
-)
-
-
 def log_notification_error(message):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -599,7 +586,6 @@ def seed_defaults():
             NOTE_PRODUCT,
             AI_WEBSITE_NOTE_PRODUCT,
             *AT1_PRODUCTS,
-            TEST_PRODUCT,
         ):
             product_exists = con.execute(
                 "SELECT id FROM products WHERE name = ? LIMIT 1",
