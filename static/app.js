@@ -57,6 +57,18 @@ function openPreview(url) {
   window.open(url, "_blank", "noreferrer");
 }
 
+function productPreviewUrls(product) {
+  const previewUrl = product.preview_url || "";
+  const previewUrls = previewUrl ? [previewUrl] : [];
+  if (
+    product.name === "AT1筆記本(精華筆記)" &&
+    !previewUrls.includes("/static/XAT1_VC_GNB.pdf")
+  ) {
+    previewUrls.push("/static/XAT1_VC_GNB.pdf");
+  }
+  return previewUrls;
+}
+
 async function api(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const res = await fetch(path, {
@@ -190,41 +202,16 @@ function renderReadContent() {
         <div class="product-grid">
           ${products
             .map((product) => {
-              const previewUrl = product.preview_url || "";
-              const previewUrls = previewUrl ? [previewUrl] : [];
-              if (
-                product.name === "AT1筆記本(精華筆記)" &&
-                !previewUrls.includes("/static/XAT1_VC_GNB.pdf")
-              ) {
-                previewUrls.push("/static/XAT1_VC_GNB.pdf");
-              }
-              const description = escapeHtml(excerpt(product.description, 180)).replaceAll("\n", "<br>");
               const imageUrl = product.image_url || DEFAULT_PRODUCT_IMAGE;
               return `
-                <article class="product-card">
-                  <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+                <article class="product-card" onclick="openProductDetail(${product.id})" tabindex="0"
+                  onkeydown="if(event.key === 'Enter') openProductDetail(${product.id})">
+                  <div class="product-image-wrap">
+                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+                  </div>
                   <div class="product-body">
-                    <div class="product-meta">
-                      <span class="tag">${escapeHtml(product.category || "工作室選品")}</span>
-                      <strong class="price">${money(product.price)}</strong>
-                    </div>
                     <h3>${escapeHtml(product.name)}</h3>
-                    <p class="hint">${description}</p>
-                    <div class="product-meta">
-                      <span class="tag">庫存 ${Number(product.stock || 0).toLocaleString("zh-TW")}</span>
-                      ${previewUrls.length ? `<span class="tag">PDF 預覽</span>` : ""}
-                    </div>
-                    <div class="table-actions">
-                      <button type="button" class="primary" onclick="addToCart(${product.id})">加入購物車</button>
-                      ${
-                        previewUrls
-                          .map(
-                            (url) =>
-                              `<a class="preview-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">預覽 PDF</a>`,
-                          )
-                          .join("")
-                      }
-                    </div>
+                    <strong class="price">${money(product.price)}</strong>
                   </div>
                 </article>
               `;
@@ -239,12 +226,98 @@ function renderReadContent() {
   wrap.innerHTML = projectContent;
 }
 
-function addToCart(productId) {
+function openProductDetail(productId) {
+  const product = state.products.find((item) => item.id === productId);
+  const overlay = $("#productDetail");
+  const content = $("#productDetailContent");
+  if (!product || !overlay || !content) return;
+  const imageUrl = product.image_url || DEFAULT_PRODUCT_IMAGE;
+  const previewLinks = productPreviewUrls(product)
+    .map((url) => `<a class="product-preview-button" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">預覽 PDF</a>`)
+    .join("");
+
+  content.innerHTML = `
+    <div class="product-detail-layout">
+      <div class="product-detail-gallery">
+        <div class="product-detail-image"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}"></div>
+        <button type="button" class="product-thumb active"><img src="${escapeHtml(imageUrl)}" alt=""></button>
+      </div>
+      <div class="product-detail-info">
+        <h2 id="productDetailTitle">${escapeHtml(product.name)}</h2>
+        <div class="product-summary">
+          <span>${escapeHtml(product.category || "工作室選品")}</span>
+          <i></i>
+          <span>庫存 ${Number(product.stock || 0).toLocaleString("zh-TW")} 件</span>
+        </div>
+        <div class="product-detail-price">${money(product.price)}</div>
+        <div class="product-detail-row">
+          <span>訂購方式</span>
+          <div><strong>選擇數量後加入購物車，即可接續完成訂單</strong><small>送出後將依商品內容與您確認後續資訊</small></div>
+        </div>
+        <div class="product-detail-row">
+          <span>服務說明</span>
+          <div><strong>如對內容或訂單有疑問，可透過網站聯絡資訊詢問</strong></div>
+        </div>
+        <div class="product-detail-row">
+          <span>內容介紹</span>
+          <div class="product-detail-description">${escapeHtml(product.description || "暫無商品說明").replaceAll("\n", "<br>")}</div>
+        </div>
+        <div class="product-detail-row">
+          <span>數量</span>
+          <div class="quantity-picker">
+            <button type="button" onclick="changeProductQuantity(-1)">−</button>
+            <input id="productDetailQuantity" type="number" value="1" min="1" max="${Number(product.stock || 1)}" aria-label="商品數量">
+            <button type="button" onclick="changeProductQuantity(1)">＋</button>
+            <small>尚有 ${Number(product.stock || 0).toLocaleString("zh-TW")} 件</small>
+          </div>
+        </div>
+        <div class="product-detail-actions">
+          <button type="button" class="add-cart-button" onclick="addDetailProductToCart(${product.id})">加入購物車</button>
+          <button type="button" class="buy-now-button" onclick="buyProductNow(${product.id})">立即訂購</button>
+          ${previewLinks}
+        </div>
+      </div>
+    </div>`;
+  overlay.classList.add("open");
+  overlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeProductDetail() {
+  const overlay = $("#productDetail");
+  if (!overlay) return;
+  overlay.classList.remove("open");
+  overlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function changeProductQuantity(change) {
+  const input = $("#productDetailQuantity");
+  if (!input) return;
+  input.value = Math.min(Number(input.max || 1), Math.max(1, Number(input.value || 1) + change));
+}
+
+function detailProductQuantity() {
+  return Math.max(1, Number.parseInt($("#productDetailQuantity")?.value || "1", 10) || 1);
+}
+
+function addDetailProductToCart(productId) {
+  addToCart(productId, detailProductQuantity());
+}
+
+function buyProductNow(productId) {
+  addToCart(productId, detailProductQuantity());
+  closeProductDetail();
+  $("#cartDrawer")?.classList.add("open");
+}
+
+function addToCart(productId, quantity = 1) {
   const product = state.products.find((item) => item.id === productId);
   if (!product || product.stock <= 0) return;
   const found = state.cart.find((item) => item.product_id === productId);
-  if (found) found.quantity += 1;
-  else state.cart.push({ product_id: productId, quantity: 1 });
+  const amount = Math.min(Math.max(1, Number(quantity) || 1), Number(product.stock));
+  if (found) found.quantity = Math.min(found.quantity + amount, Number(product.stock));
+  else state.cart.push({ product_id: productId, quantity: amount });
   saveCart();
   notify("已加入購物車");
 }
@@ -654,6 +727,16 @@ function bindEvents() {
   }
   if (closeCartBtn && cartDrawer) {
     closeCartBtn.addEventListener("click", () => cartDrawer.classList.remove("open"));
+  }
+
+  const productDetail = $("#productDetail");
+  if (productDetail) {
+    productDetail.addEventListener("click", (event) => {
+      if (event.target === productDetail) closeProductDetail();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && productDetail.classList.contains("open")) closeProductDetail();
+    });
   }
 
   const checkoutForm = $("#checkoutForm");
