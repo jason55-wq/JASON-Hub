@@ -243,12 +243,68 @@ def migration_005_add_ai_website_note_product(connection, backend):
     )
 
 
+def migration_006_add_ai_website_product_system(connection, backend):
+    connection.execute(
+        """
+        INSERT INTO products
+        (name, category, description, price, stock, status, featured, preview_url, image_url)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM products WHERE name = ?
+        )
+        """,
+        (
+            "AI架站(商品系統)",
+            "筆記本",
+            (
+                "從零打造可實際運作的網站商品系統，內容涵蓋商品資料規劃、商品展示、購物車與訂單流程等核心功能。"
+                "透過清楚的實作步驟，帶你運用 AI 協助開發與整理程式，逐步完成一套可延伸的電商網站基礎，"
+                "適合想學習 AI 架站、建立作品集或開發個人商店的初學者。"
+            ),
+            600,
+            30,
+            "active",
+            1,
+            "/static/AI架站(商品系統篇預覽).pdf",
+            "/image/notebook/商品系統.jpg",
+            "AI架站(商品系統)",
+        ),
+    )
+
+
+def migration_007_rename_ai_website_notes(connection, backend):
+    connection.execute(
+        """
+        UPDATE products
+        SET name = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        (
+            "AI架站筆記(精華筆記-AI工具基礎篇)",
+            "AI架站筆記(精華筆記v1)",
+        ),
+    )
+    connection.execute(
+        """
+        UPDATE products
+        SET name = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        (
+            "AI架站筆記(精華筆記-商品篇)",
+            "AI架站(商品系統)",
+        ),
+    )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
     (3, "paypal_checkout", migration_003_paypal_checkout),
     (4, "remove_ecpay_test_product", migration_004_remove_ecpay_test_product),
     (5, "add_ai_website_note_product", migration_005_add_ai_website_note_product),
+    (6, "add_ai_website_product_system", migration_006_add_ai_website_product_system),
+    (7, "rename_ai_website_notes", migration_007_rename_ai_website_notes),
 )
 
 

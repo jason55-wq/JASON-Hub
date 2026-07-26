@@ -56,7 +56,7 @@ NOTE_PRODUCT = (
     "/image/notebook/未命名.jpg",
 )
 AI_WEBSITE_NOTE_PRODUCT = (
-    "AI架站筆記(精華筆記v1)",
+    "AI架站筆記(精華筆記-AI工具基礎篇)",
     "筆記本",
     "整理 AI 架站的實作重點與精華筆記，協助初學者快速掌握網站規劃、製作與上線流程。",
     600,
@@ -65,6 +65,21 @@ AI_WEBSITE_NOTE_PRODUCT = (
     1,
     "/static/AI架站(精華筆記-1)預覽.pdf",
     "/image/notebook/au架站.jpg",
+)
+AI_WEBSITE_PRODUCT_SYSTEM_PRODUCT = (
+    "AI架站筆記(精華筆記-商品篇)",
+    "筆記本",
+    (
+        "從零打造可實際運作的網站商品系統，內容涵蓋商品資料規劃、商品展示、購物車與訂單流程等核心功能。"
+        "透過清楚的實作步驟，帶你運用 AI 協助開發與整理程式，逐步完成一套可延伸的電商網站基礎，"
+        "適合想學習 AI 架站、建立作品集或開發個人商店的初學者。"
+    ),
+    600,
+    30,
+    "active",
+    1,
+    "/static/AI架站(商品系統篇預覽).pdf",
+    "/image/notebook/商品系統.jpg",
 )
 AT1_DESCRIPTION = (
     "AT1 聲控平台結合 Arduino、藍牙、語音控制與接近感應技術，帶你快速完成專題製作與智慧控制應用。"
@@ -585,6 +600,7 @@ def seed_defaults():
             *load_seed_products(),
             NOTE_PRODUCT,
             AI_WEBSITE_NOTE_PRODUCT,
+            AI_WEBSITE_PRODUCT_SYSTEM_PRODUCT,
             *AT1_PRODUCTS,
         ):
             product_exists = con.execute(
