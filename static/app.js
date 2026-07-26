@@ -192,8 +192,11 @@ function renderReadContent() {
             .map((product) => {
               const previewUrl = product.preview_url || "";
               const previewUrls = previewUrl ? [previewUrl] : [];
-              if (product.name === "AT1筆記本(精華筆記)") {
-                previewUrls.push("/static/XAT1_VC_GNB部分內容.pdf");
+              if (
+                product.name === "AT1筆記本(精華筆記)" &&
+                !previewUrls.includes("/static/XAT1_VC_GNB.pdf")
+              ) {
+                previewUrls.push("/static/XAT1_VC_GNB.pdf");
               }
               const description = escapeHtml(excerpt(product.description, 180)).replaceAll("\n", "<br>");
               const imageUrl = product.image_url || DEFAULT_PRODUCT_IMAGE;

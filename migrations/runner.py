@@ -297,6 +297,20 @@ def migration_007_rename_ai_website_notes(connection, backend):
     )
 
 
+def migration_008_update_at1_note_preview(connection, backend):
+    connection.execute(
+        """
+        UPDATE products
+        SET preview_url = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        (
+            "/static/XAT1_VC_GNB.pdf",
+            "AT1筆記本(精華筆記)",
+        ),
+    )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
@@ -305,6 +319,7 @@ MIGRATIONS = (
     (5, "add_ai_website_note_product", migration_005_add_ai_website_note_product),
     (6, "add_ai_website_product_system", migration_006_add_ai_website_product_system),
     (7, "rename_ai_website_notes", migration_007_rename_ai_website_notes),
+    (8, "update_at1_note_preview", migration_008_update_at1_note_preview),
 )
 
 

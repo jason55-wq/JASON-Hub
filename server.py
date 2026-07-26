@@ -94,7 +94,7 @@ AT1_PRODUCTS = (
         30,
         "active",
         1,
-        "/static/XAT1 上架資料.pdf",
+        "/static/XAT1_VC_GNB.pdf",
         "/image/AT1/未命名.png",
     ),
     (
