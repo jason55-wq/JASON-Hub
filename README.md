@@ -59,3 +59,32 @@ python scripts/migrate_sqlite_to_postgres.py --sqlite data/studio_shop.db
 - Python 與 SQLite 資料整合
 - 裝置資料收集與管理介面
 - 適合作品集、教學與技術展示
+
+## AI 客服設定與成本控制
+
+AI 客服使用 OpenAI Responses API。API Key 只可放在本機 `.env` 或 Render 的
+Environment Variables，不可寫入 HTML、JavaScript、GitHub 或公開設定檔。
+
+Render 建議設定：
+
+```text
+OPENAI_API_KEY=你的 OpenAI API Key
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_TIMEOUT_SECONDS=20
+AI_CHAT_ENABLED=true
+AI_MAX_MESSAGE_LENGTH=500
+AI_MAX_OUTPUT_TOKENS=300
+AI_RATE_LIMIT_PER_MINUTE=5
+AI_RATE_LIMIT_PER_HOUR=20
+AI_HISTORY_MAX_ROUNDS=4
+```
+
+要立即停止新的 AI API 呼叫，可將 `AI_CHAT_ENABLED` 設為 `false` 並重新部署／重啟
+服務。降低 `AI_MAX_OUTPUT_TOKENS`、限制詢問次數及縮短對話歷史，可以進一步減少
+token 使用量。伺服器會以 `[ai-chat-usage]` 紀錄每次成功回覆的 input、output 與
+total tokens，但不記錄 API Key、聊天內容或付款 Secret。
+
+網站端限制只能降低濫用與意外支出，不能保證每月費用一定低於特定金額。若目標是
+每月約 US$5，仍需自行登入 OpenAI Platform，為專用 Project 設定可用的 Budget／
+Spend Limit，並定期查看 Usage 與 Billing。不同帳戶可用的預算控制項可能不同，
+應以 OpenAI Platform 當下顯示的設定為準。

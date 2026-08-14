@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>傑生工程工作室 | 嵌入式系統展示</title>
     <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/chatbot.css">
   </head>
   <body>
     <header class="topbar">
@@ -148,6 +149,28 @@
       </div>
     </div>
 
+    <aside id="chatbot" class="chatbot" aria-label="AI 客服">
+      <section id="chatbotPanel" class="chatbot-panel" aria-hidden="true" aria-labelledby="chatbotTitle">
+        <header class="chatbot-header">
+          <h2 id="chatbotTitle">AI 客服</h2>
+          <button id="chatbotClose" class="chatbot-close" type="button" aria-label="關閉 AI 客服">×</button>
+        </header>
+        <div id="chatbotMessages" class="chatbot-messages" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="chatbot-message chatbot-message-ai">您好，有什麼可以幫助您的嗎？</div>
+        </div>
+        <p id="chatbotError" class="chatbot-error" role="alert" hidden></p>
+        <form id="chatbotForm" class="chatbot-form">
+          <label class="chatbot-label" for="chatbotInput">請輸入問題</label>
+          <textarea id="chatbotInput" maxlength="500" rows="2" placeholder="請輸入問題……" required></textarea>
+          <button id="chatbotSend" type="submit">送出</button>
+        </form>
+      </section>
+      <button id="chatbotToggle" class="chatbot-toggle" type="button" aria-expanded="false" aria-controls="chatbotPanel">
+        <span aria-hidden="true">💬</span> AI 客服
+      </button>
+    </aside>
+
     <script src="/static/app.js"></script>
+    <script src="/static/chatbot.js"></script>
   </body>
 </html>

@@ -17,6 +17,7 @@ import time
 import traceback
 
 import database
+import chatbot_service
 from migrations.runner import run_migrations
 
 
@@ -905,6 +906,10 @@ class App(BaseHTTPRequestHandler):
                 )
             if path == "/api/visit-stats" and method == "GET":
                 return self.visit_stats()
+            if path == "/api/chat/status" and method == "GET":
+                return self.chat_status()
+            if path == "/api/chat" and method == "POST":
+                return self.chat()
             if path == "/api/login" and method == "POST":
                 return self.login()
             if path == "/api/logout" and method == "POST":
@@ -948,6 +953,74 @@ class App(BaseHTTPRequestHandler):
             if database.is_integrity_error(exc):
                 return self.error(409, "帳號、Email 或資料已存在")
             return self.error(500, f"伺服器錯誤：{exc}")
+
+    def chat_status(self):
+        enabled, message = chatbot_service.chat_availability()
+        settings = chatbot_service.chat_settings()
+        return self.json(
+            {
+                "ok": True,
+                "enabled": enabled,
+                "message": message,
+                "max_message_length": settings["max_message_length"],
+            }
+        )
+
+    def chat(self):
+        try:
+            available, unavailable_message = chatbot_service.chat_availability()
+            if not available:
+                return self.error(503, unavailable_message)
+
+            settings = chatbot_service.chat_settings()
+            data = self.read_json()
+            if not isinstance(data, dict):
+                return self.error(400, "JSON 格式不正確")
+            message = data.get("message", "")
+            if not isinstance(message, str):
+                return self.error(400, "訊息格式不正確")
+            message = message.strip()
+            if not message:
+                return self.error(400, "請輸入問題")
+            if len(message) > settings["max_message_length"]:
+                return self.error(400, "您的問題內容過長，請縮短後再試。")
+            history = chatbot_service.sanitize_history(
+                data.get("history", []), settings["max_message_length"]
+            )
+
+            forwarded_for = self.headers.get("X-Forwarded-For", "")
+            client_id = forwarded_for.split(",", 1)[0].strip() or self.client_address[0]
+            if not chatbot_service.check_rate_limit(client_id):
+                return self.error(429, "AI 客服使用次數過於頻繁，請稍後再試。")
+
+            connection = db()
+            try:
+                with connection as con:
+                    products = [
+                        dict(row)
+                        for row in con.execute(
+                            """
+                            SELECT name, category, price, description
+                            FROM products
+                            WHERE status = 'active'
+                            ORDER BY featured DESC, created_at DESC
+                            LIMIT 30
+                            """
+                        ).fetchall()
+                    ]
+            finally:
+                if database.database_backend() == "sqlite":
+                    connection.close()
+            reply = chatbot_service.ask_ai(message, products, history)
+            return self.json({"ok": True, "reply": reply})
+        except chatbot_service.ChatbotDisabledError:
+            return self.error(503, "AI 客服目前暫停服務。")
+        except chatbot_service.ChatbotUnavailableError:
+            return self.error(503, "AI 客服目前暫時無法回覆，請稍後再試。")
+        except ValueError:
+            return self.error(400, "JSON 格式不正確")
+        except Exception:
+            return self.error(503, "AI 客服目前暫時無法回覆，請稍後再試。")
 
     def login(self):
         data = self.read_json()
