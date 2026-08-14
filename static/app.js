@@ -168,7 +168,127 @@ function renderVisitStats() {
 
 function setReadMode(mode) {
   state.readMode = mode === "product" ? "product" : "project";
+  if (state.readMode === "project" && window.location.pathname === "/") {
+    window.history.replaceState({}, "", "/articles");
+  } else if (state.readMode === "product" && window.location.pathname.startsWith("/articles")) {
+    window.history.replaceState({}, "", "/");
+  }
   renderReadContent();
+}
+
+function formatPublishedDate(value) {
+  const [year, month, day] = String(value).split("-");
+  return `${year}年${month}月${day}日`;
+}
+
+function articleRoute() {
+  const parts = decodeURIComponent(window.location.pathname)
+    .split("/")
+    .filter(Boolean);
+  if (parts[0] !== "articles") return { type: "all" };
+  if (parts.length === 1) return { type: "all" };
+  if (/^\d{4}$/.test(parts[1]) && parts.length === 2) {
+    return { type: "year", year: parts[1] };
+  }
+  if (/^\d{4}$/.test(parts[1]) && /^\d{2}$/.test(parts[2] || "") && parts.length === 3) {
+    return { type: "month", year: parts[1], month: parts[2] };
+  }
+  if (parts.length === 2) return { type: "article", slug: parts[1] };
+  return { type: "not-found" };
+}
+
+function parseArticles(projectContent) {
+  const template = document.createElement("template");
+  template.innerHTML = projectContent;
+  return [...template.content.querySelectorAll("article[data-article-slug]")]
+    .map((element) => ({
+      slug: element.dataset.articleSlug,
+      publishedDate: element.dataset.publishedDate,
+      title: element.querySelector("h3")?.textContent.trim() || "文章",
+      element,
+    }))
+    .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate));
+}
+
+function renderArticleArchive(articles) {
+  const archive = new Map();
+  articles.forEach((article) => {
+    const [year, month] = article.publishedDate.split("-");
+    if (!archive.has(year)) archive.set(year, new Set());
+    archive.get(year).add(month);
+  });
+  return [...archive.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(
+      ([year, months]) => `
+        <div class="article-archive-year">
+          <a href="/articles/${year}" data-article-link>${year} 年</a>
+          <ul>
+            ${[...months]
+              .sort((a, b) => b.localeCompare(a))
+              .map((month) => `<li><a href="/articles/${year}/${month}" data-article-link>${month} 月</a></li>`)
+              .join("")}
+          </ul>
+        </div>`
+    )
+    .join("");
+}
+
+function renderArticles(projectContent) {
+  const allArticles = parseArticles(projectContent);
+  const route = articleRoute();
+  let articles = allArticles;
+  let heading = "全部文章";
+
+  if (route.type === "year") {
+    articles = allArticles.filter((article) => article.publishedDate.startsWith(`${route.year}-`));
+    heading = `${route.year} 年文章`;
+  } else if (route.type === "month") {
+    articles = allArticles.filter((article) => article.publishedDate.startsWith(`${route.year}-${route.month}-`));
+    heading = `${route.year} 年 ${route.month} 月文章`;
+  } else if (route.type === "article") {
+    articles = allArticles.filter((article) => article.slug === route.slug);
+    heading = articles[0]?.title || "找不到文章";
+  } else if (route.type === "not-found") {
+    articles = [];
+    heading = "找不到文章";
+  }
+
+  const isSingle = route.type === "article" && articles.length === 1;
+  const articleHtml = articles.length
+    ? articles
+        .map((article) => {
+          const card = article.element.cloneNode(true);
+          const title = card.querySelector("h3");
+          const date = document.createElement("p");
+          date.className = "article-published-date";
+          date.textContent = `發布日期：${formatPublishedDate(article.publishedDate)}`;
+          title?.insertAdjacentElement("afterend", date);
+          if (!isSingle) {
+            const link = document.createElement("a");
+            link.className = "article-permalink";
+            link.href = `/articles/${article.slug}`;
+            link.dataset.articleLink = "";
+            link.textContent = "閱讀單篇文章";
+            date.insertAdjacentElement("afterend", link);
+          }
+          return card.outerHTML;
+        })
+        .join("")
+    : `<div class="panel"><p class="hint">這個分類目前沒有文章。</p><a href="/articles" data-article-link>返回全部文章</a></div>`;
+
+  return `
+    <div class="article-layout">
+      <details class="article-archive" open>
+        <summary>文章分類</summary>
+        <a class="article-archive-all" href="/articles" data-article-link>全部文章</a>
+        ${renderArticleArchive(allArticles)}
+      </details>
+      <section class="article-results" aria-labelledby="articleArchiveTitle">
+        <h2 id="articleArchiveTitle" class="article-results-title">${escapeHtml(heading)}</h2>
+        ${articleHtml}
+      </section>
+    </div>`;
 }
 
 function renderReadContent() {
@@ -180,7 +300,7 @@ function renderReadContent() {
   });
 
   const projectContent = `
-    <article class="story-card story-card-project">
+    <article class="story-card story-card-project" data-article-slug="vios-voice-control" data-published-date="2026-06-13">
       <div class="story-body">
         <div class="story-head">
           <span class="tag">專案介紹</span>
@@ -193,7 +313,7 @@ function renderReadContent() {
         <p>這不是單純的販售頁，而是一個希望讓更多人理解「如何把電腦操作變成可學習、可擴充的系統」的專案介紹。</p>
       </div>
     </article>
-    <article class="story-card story-card-project">
+    <article class="story-card story-card-project" data-article-slug="ai-website-guide" data-published-date="2026-07-27">
       <div class="story-body">
         <div class="story-head">
           <span class="tag">AI 架站</span>
@@ -271,7 +391,7 @@ function renderReadContent() {
         <p>希望這個網站分享的教學、筆記與經驗，能協助更多初學者了解 AI 架站的流程，少走一些彎路，快速建立自己的第一個網站。</p>
       </div>
     </article>
-    <article class="story-card story-card-project">
+    <article class="story-card story-card-project" data-article-slug="arduino-gbox-diy-review" data-published-date="2026-08-13">
       <div class="story-body">
         <div class="story-head">
           <span class="tag">Arduino GBOX DIY</span>
@@ -332,7 +452,7 @@ function renderReadContent() {
     return;
   }
 
-  wrap.innerHTML = projectContent;
+  wrap.innerHTML = renderArticles(projectContent);
 }
 
 function openProductDetail(productId) {
@@ -826,6 +946,21 @@ function bindEvents() {
 
   $$("[data-read-mode]").forEach((button) => {
     button.addEventListener("click", () => setReadMode(button.dataset.readMode));
+  });
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-article-link]");
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.history.pushState({}, "", link.href);
+    state.readMode = "project";
+    renderReadContent();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  window.addEventListener("popstate", () => {
+    if (window.location.pathname.startsWith("/articles")) state.readMode = "project";
+    renderReadContent();
   });
 
   const openCartBtn = $("#openCartBtn");

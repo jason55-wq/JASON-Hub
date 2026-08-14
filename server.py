@@ -646,8 +646,8 @@ class App(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/":
-            return self.serve_index()
+        if parsed.path == "/" or parsed.path == "/articles" or parsed.path.startswith("/articles/"):
+            return self.serve_index(record_visit=parsed.path == "/")
         if parsed.path == "/ecpay/result":
             return self.ecpay_result({})
         if parsed.path in {"/paypal/success", "/paypal/cancel", "/paypal/failure"}:
@@ -736,11 +736,11 @@ class App(BaseHTTPRequestHandler):
         self.end_headers()
         self.write_body(content)
 
-    def serve_index(self):
+    def serve_index(self, record_visit=True):
         path = os.path.join(BASE_DIR, "index.html")
         if os.path.exists(path):
             try:
-                if self.command == "GET":
+                if self.command == "GET" and record_visit:
                     self.record_home_visit()
                 with open(path, "r", encoding="utf-8") as f:
                     html = f.read()
