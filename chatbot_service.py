@@ -13,6 +13,7 @@ DEFAULT_RATE_LIMIT_PER_HOUR = 20
 DEFAULT_HISTORY_MAX_ROUNDS = 4
 
 ARTICLE_CONTEXT = (
+    "2026-08-28｜使用 AI 工具進行 Debug：軟硬體整合專案實作心得｜/articles/ai-assisted-embedded-debugging",
     "2026-08-13｜閱讀偉克多工作室 Arduino GBOX DIY 電子報心得｜/articles/arduino-gbox-diy-review",
     "2026-07-27｜AI 架站完整指南｜零基礎也能打造自己的網站｜/articles/ai-website-guide",
     "2026-06-13｜把電腦操作變成人人都能學會的聲控系統｜/articles/vios-voice-control",
