@@ -300,6 +300,58 @@ function renderReadContent() {
   });
 
   const projectContent = `
+    <article class="story-card story-card-project" data-article-slug="personal-ai-knowledge-base" data-published-date="2026-08-28">
+      <div class="story-body">
+        <div class="story-head">
+          <span class="tag">個人 AI 知識庫</span>
+          <span class="tag">RAG</span>
+          <span class="tag">GPT</span>
+        </div>
+        <h3>Jason 個人 AI 知識庫</h3>
+        <p><strong>地端 RAG 文件檢索與 GPT 問答系統</strong></p>
+
+        <h4>專案介紹</h4>
+        <p><strong>Jason 個人 AI 知識庫</strong>是一套以「個人資料管理」為核心所開發的 AI 知識管理系統，結合地端文件儲存、RAG（Retrieval-Augmented Generation，檢索增強生成）技術與 GPT，讓使用者可以建立屬於自己的私人 AI 資料庫。</p>
+        <p>不同於一般 AI 問答系統主要依賴模型既有知識，本系統的核心概念是讓 AI 優先根據使用者自行建立與上傳的資料進行檢索，再將相關內容提供給 GPT 進行整理與回答，使 AI 能夠針對個人文件提供更具依據的問答結果。</p>
+
+        <h4>專案功能</h4>
+        <p>系統支援將不同類型的個人資料集中管理，並透過文件解析、文字切割、向量化與語意搜尋建立 RAG 檢索流程。當使用者提出問題時，系統會先從個人知識庫中搜尋最相關的內容，再將檢索結果交由 GPT 產生回答。</p>
+        <p>主要功能包含：</p>
+        <ul>
+          <li>建立多個個人知識庫與資料分類</li>
+          <li>上傳與管理 PDF、Word、PPT、TXT 等文件</li>
+          <li>自動解析與整理文件內容</li>
+          <li>建立文件向量索引</li>
+          <li>使用 RAG 技術進行語意檢索</li>
+          <li>串接 GPT 進行自然語言問答</li>
+          <li>根據個人資料產生具有上下文的回答</li>
+          <li>顯示回答所參考的文件來源</li>
+          <li>管理、搜尋與刪除已上傳資料</li>
+          <li>將不同領域資料建立成獨立知識庫</li>
+        </ul>
+
+        <h4>系統概念</h4>
+        <p>整體資料處理流程為：</p>
+        <p><strong>文件上傳 → 文件解析 → 文字切割 → Embedding 向量化 → 向量資料庫 → RAG 語意檢索 → GPT → 回答與資料來源</strong></p>
+        <p>透過這套架構，可以讓大型語言模型不只是依靠自身訓練資料回答問題，而是結合使用者建立的個人資料庫，形成更符合個人需求的 AI 助理。</p>
+
+        <h4>開發目的</h4>
+        <p>隨著個人累積的 PDF、課程講義、研究資料、技術文件與筆記越來越多，傳統透過資料夾逐一尋找文件的方式效率有限。</p>
+        <p>因此，我希望建立一套屬於自己的 AI 知識管理平台。</p>
+        <p>例如將「嵌入式系統」、「程式設計」、「研究資料」、「工作文件」等內容建立成不同知識庫，未來只需要透過自然語言提出問題，就能快速從大量個人文件中尋找相關資訊。</p>
+        <p>這個專案不只是單純的 GPT 聊天介面，而是希望將 <strong>個人資料庫、RAG 與大型語言模型</strong>整合成一套真正能長期累積與使用的「個人 AI 第二大腦」。</p>
+
+        <h4>專案特色</h4>
+        <p>Jason 個人 AI 知識庫最大的特色，在於將<strong>資料掌控權與 AI 能力分開設計</strong>。</p>
+        <p>文件與知識庫可以保留於自己的環境中，而 GPT 主要負責理解問題與整理檢索結果。未來系統也可以進一步加入地端大型語言模型，降低對單一雲端 AI 模型的依賴。</p>
+        <p>因此，本系統具有良好的擴充性，未來可持續整合更多文件格式、Embedding 模型、向量資料庫與不同的大型語言模型。</p>
+
+        <h4>未來規劃</h4>
+        <p>後續預計持續加入多知識庫管理、進階搜尋、文件來源追蹤、對話紀錄、模型切換與權限管理等功能，並研究 GPT 與地端 LLM 混合使用的架構。</p>
+        <p>最終目標是打造一套可以持續累積個人知識，並透過 AI 快速搜尋、理解與運用資料的：</p>
+        <p><strong>Personal AI Knowledge Base — 個人 AI 知識庫。</strong></p>
+      </div>
+    </article>
     <article class="story-card story-card-project" data-article-slug="vios-voice-control" data-published-date="2026-06-13">
       <div class="story-body">
         <div class="story-head">

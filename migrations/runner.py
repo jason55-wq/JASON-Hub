@@ -311,6 +311,65 @@ def migration_008_update_at1_note_preview(connection, backend):
     )
 
 
+def migration_009_add_jason_ai_knowledge_base(connection, backend):
+    connection.execute(
+        """
+        INSERT INTO products
+        (name, category, description, price, stock, status, featured, preview_url, image_url)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM products WHERE name = ?
+        )
+        """,
+        (
+            "Jason 個人 AI 知識庫 — 地端 RAG 文件檢索與 GPT 問答系統",
+            "AI 系統",
+            "",
+            600,
+            30,
+            "active",
+            1,
+            "",
+            "",
+            "Jason 個人 AI 知識庫 — 地端 RAG 文件檢索與 GPT 問答系統",
+        ),
+    )
+
+
+def migration_010_update_jason_ai_knowledge_base_details(connection, backend):
+    connection.execute(
+        """
+        UPDATE products
+        SET description = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        (
+            "Jason 個人 AI 知識庫是一套地端 RAG 文件檢索系統，可管理個人資料並串接 GPT，"
+            "透過文件內容進行智慧搜尋與問答，打造專屬、安全且高效率的個人 AI 知識管理平台。",
+            "/image/AI/jason-ai-knowledge-base.png",
+            "Jason 個人 AI 知識庫 — 地端 RAG 文件檢索與 GPT 問答系統",
+        ),
+    )
+
+
+def migration_011_restore_product_preview_urls(connection, backend):
+    previews = (
+        ("/static/精華筆記V1(預覽).pdf", "傑生工程筆記本"),
+        ("/static/XAT1_VC_GNB.pdf", "AT1筆記本(精華筆記)"),
+        ("/static/AI架站(精華筆記-1)預覽.pdf", "AI架站筆記(精華筆記-AI工具基礎篇)"),
+        ("/static/AI架站(商品系統篇預覽).pdf", "AI架站筆記(精華筆記-商品篇)"),
+    )
+    for preview_url, product_name in previews:
+        connection.execute(
+            """
+            UPDATE products
+            SET preview_url = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE name = ?
+            """,
+            (preview_url, product_name),
+        )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
@@ -320,6 +379,9 @@ MIGRATIONS = (
     (6, "add_ai_website_product_system", migration_006_add_ai_website_product_system),
     (7, "rename_ai_website_notes", migration_007_rename_ai_website_notes),
     (8, "update_at1_note_preview", migration_008_update_at1_note_preview),
+    (9, "add_jason_ai_knowledge_base", migration_009_add_jason_ai_knowledge_base),
+    (10, "update_jason_ai_knowledge_base_details", migration_010_update_jason_ai_knowledge_base_details),
+    (11, "restore_product_preview_urls", migration_011_restore_product_preview_urls),
 )
 
 

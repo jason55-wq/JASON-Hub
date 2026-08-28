@@ -87,7 +87,7 @@ class PersistenceTests(unittest.TestCase):
                 connection.execute(
                     "SELECT COUNT(*) AS count FROM database_migrations"
                 ).fetchone()["count"],
-                8,
+                11,
             )
 
     def test_ai_website_note_migration_adds_missing_product_without_overwriting(self):
