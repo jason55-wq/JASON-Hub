@@ -87,8 +87,54 @@ class PersistenceTests(unittest.TestCase):
                 connection.execute(
                     "SELECT COUNT(*) AS count FROM database_migrations"
                 ).fetchone()["count"],
-                11,
+                14,
             )
+
+    def test_voice_home_product_migration_is_idempotent(self):
+        name = "聲控我的家"
+        server.init_db()
+        server.init_db()
+        with server.db() as connection:
+            products = connection.execute(
+                """
+                SELECT category, price, stock, status, featured, preview_url, image_url
+                FROM products
+                WHERE name = ?
+                """,
+                (name,),
+            ).fetchall()
+        self.assertEqual(len(products), 1)
+        product = products[0]
+        self.assertEqual(
+            (product["category"], product["price"], product["stock"], product["status"]),
+            ("聲控主機", 1800, 30, "active"),
+        )
+        self.assertEqual(product["featured"], 1)
+        self.assertEqual(product["preview_url"], "")
+        self.assertEqual(product["image_url"], "/image/VIOS/voice-home-product.png")
+
+    def test_voice_home_vios_bundle_is_restored_without_duplicates(self):
+        name = "聲控我的家+聲控電腦VIOS"
+        server.init_db()
+        server.init_db()
+        with server.db() as connection:
+            products = connection.execute(
+                """
+                SELECT category, price, stock, status, featured, preview_url, image_url
+                FROM products
+                WHERE name = ?
+                """,
+                (name,),
+            ).fetchall()
+        self.assertEqual(len(products), 1)
+        product = products[0]
+        self.assertEqual(
+            (product["category"], product["price"], product["stock"], product["status"]),
+            ("聲控套組", 2100, 30, "active"),
+        )
+        self.assertEqual(product["featured"], 1)
+        self.assertEqual(product["preview_url"], "")
+        self.assertEqual(product["image_url"], "/image/VIOS/voice-home-vios-bundle.png")
 
     def test_ai_website_note_migration_adds_missing_product_without_overwriting(self):
         server.init_db()

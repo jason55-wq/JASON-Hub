@@ -370,6 +370,69 @@ def migration_011_restore_product_preview_urls(connection, backend):
         )
 
 
+def migration_012_add_voice_home_product(connection, backend):
+    name = "聲控我的家"
+    connection.execute(
+        """
+        INSERT INTO products
+        (name, category, description, price, stock, status, featured, preview_url, image_url)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM products WHERE name = ?
+        )
+        """,
+        (
+            name,
+            "聲控主機",
+            "聲控我的家 DIY 課程與主機，適合學習語音控制及智慧居家應用。",
+            1800,
+            30,
+            "active",
+            1,
+            "",
+            "/image/VIOS/voice-home-vios-bundle.png",
+            name,
+        ),
+    )
+
+
+def migration_013_restore_voice_home_vios_bundle(connection, backend):
+    name = "聲控我的家+聲控電腦VIOS"
+    connection.execute(
+        """
+        INSERT INTO products
+        (name, category, description, price, stock, status, featured, preview_url, image_url)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM products WHERE name = ?
+        )
+        """,
+        (
+            name,
+            "聲控套組",
+            "整合「聲控我的家」主機與「聲控電腦 VIOS」，一次體驗智慧居家控制與 Windows 電腦語音操作。",
+            2100,
+            30,
+            "active",
+            1,
+            "",
+            "/image/VIOS/voice-home-vios-bundle.png",
+            name,
+        ),
+    )
+
+
+def migration_014_update_voice_home_image(connection, backend):
+    connection.execute(
+        """
+        UPDATE products
+        SET image_url = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE name = ?
+        """,
+        ("/image/VIOS/voice-home-product.png", "聲控我的家"),
+    )
+
+
 MIGRATIONS = (
     (1, "initial_schema", migration_001_initial_schema),
     (2, "legacy_columns_and_indexes", migration_002_legacy_columns_and_indexes),
@@ -382,6 +445,9 @@ MIGRATIONS = (
     (9, "add_jason_ai_knowledge_base", migration_009_add_jason_ai_knowledge_base),
     (10, "update_jason_ai_knowledge_base_details", migration_010_update_jason_ai_knowledge_base_details),
     (11, "restore_product_preview_urls", migration_011_restore_product_preview_urls),
+    (12, "add_voice_home_product", migration_012_add_voice_home_product),
+    (13, "restore_voice_home_vios_bundle", migration_013_restore_voice_home_vios_bundle),
+    (14, "update_voice_home_image", migration_014_update_voice_home_image),
 )
 
 

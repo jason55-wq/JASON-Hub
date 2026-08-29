@@ -204,10 +204,11 @@ function parseArticles(projectContent) {
     .map((element) => ({
       slug: element.dataset.articleSlug,
       publishedDate: element.dataset.publishedDate,
+      pinned: element.dataset.pinned === "true",
       title: element.querySelector("h3")?.textContent.trim() || "文章",
       element,
     }))
-    .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate));
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.publishedDate.localeCompare(a.publishedDate));
 }
 
 function renderArticleArchive(articles) {
@@ -300,6 +301,67 @@ function renderReadContent() {
   });
 
   const projectContent = `
+    <article class="story-card story-card-project" data-article-slug="at1-arduino-voice-control-applications" data-published-date="2026-08-29" data-pinned="true">
+      <div class="story-body">
+        <div class="story-head">
+          <span class="tag">置頂</span>
+          <span class="tag">AT1 Arduino</span>
+          <span class="tag">聲控應用</span>
+        </div>
+        <h3>[偉克多] AT1 Arduino主機～整合簡單量測＋各式測試12種應用情境：AT1～精華精簡筆記式閱讀、影片、訂購筆記、精華精簡筆記－專題製作總目錄</h3>
+
+        <h4>[偉克多] AT1 Arduino 聲控主機～整合簡單量測＋各式測試12種應用情境：總目錄</h4>
+        <p><a href="https://www.youtube.com/shorts/OGMEGkNEd64" target="_blank" rel="noreferrer">觀看 AT1 Arduino 聲控主機影片</a></p>
+
+        <p><strong>～～～ 聲控 GBOX = VE + VIOS ～～～</strong></p>
+        <p>LINE：avic8051　～～免費諮詢／洽詢，特價中</p>
+
+        <h4>VE NEXT～～自己打造「聲控我的家」應用精簡筆記</h4>
+        <p>＊影片　＊訂購 VE～聲控我家主機</p>
+        <p>VH 聲控我家～～主機開課～～來上課，送 VH 一台，台中、高雄同步開課。</p>
+        <p>台中上課：信箱：<a href="mailto:we25266855@gmail.com">we25266855@gmail.com</a>　LINE：we252668</p>
+        <p>高雄上課：LINE 諮詢×服務：avic8051　<a href="mailto:avic8051@gmail.com">avic8051@gmail.com</a></p>
+        <p>LINE 技術諮詢×服務：avic8051　<a href="mailto:avic8051@gmail.com">avic8051@gmail.com</a></p>
+
+        <h4>AT1 聲控主機精華筆記總目錄</h4>
+        <p>＊AT1～聲控平台精華筆記式閱讀　＊影片　＊訂購筆記</p>
+        <p>＊AT1～XCA 聲控車精華筆記式閱讀　＊影片　＊訂購筆記</p>
+        <p>＊AT1～LM 遙控變聲控精華筆記試閱讀　＊影片　＊訂購筆記＋LM</p>
+
+        <h4>專題製作、專案應用組合特價區</h4>
+        <p>LM IR 學習模組＋GBOX 特價 1,400 元，加送參考書三選一，任一本書。</p>
+        <p><strong>～～簡單到拉一條線，聲控您家冷氣～～</strong></p>
+        <p>＊聲控開冷氣家電：AT1＋LM 特價 1,800 元</p>
+        <p>＊Arduino MSAY 說中文：AT1＋MSAY 特價 1,600 元</p>
+        <p>隨意拔插方便，直接在 C 程式中輸出語音合成，說出中文。</p>
+        <p><a href="https://www.youtube.com/shorts/zp774ywCPZ4" target="_blank" rel="noreferrer">觀看 Arduino MSAY 說中文影片</a></p>
+        <p>＊Arduino 說 MP3＋AT1 特價 1,600 元</p>
+        <p>2 線控制 MP3 模組說出語音、播放音樂；USB 直接更新內建 8M 記憶體資料（可儲存約 2 首歌、50 段文字），並可擴充讀卡功能。</p>
+        <p><a href="https://youtube.com/shorts/QdeT7Vtct9o" target="_blank" rel="noreferrer">觀看 Arduino 說 MP3 影片</a></p>
+
+        <h4>AT1 主機應用</h4>
+        <ol>
+          <li>WIN10 熱當機問題，可以用倒數計時器處理；時間到時讓電腦待機，也剛好可以休息一下。</li>
+          <li>人休息 20 分鐘，電腦休息 20 分鐘，思考下一個階段要寫些什麼。</li>
+          <li>記錄時間倒數計時；休息、重新應用，或泡麵計時都可以用到。</li>
+          <li>新的計時：倒數計時的規格、功能都可以自行設計。</li>
+          <li>經由 RGOO 連線 Android 手機，啟動 Google 聲控及應答。</li>
+          <li>搭配 LM 模組，AT1 可控制紅外線遙控器學習功能，進行整合控制。</li>
+          <li>手機聲控說出「空調」，開啟冷氣。</li>
+          <li>可整合溫室控制應用，在時間到或溫度達標時開啟冷氣。</li>
+          <li>AT1 第 3 項電壓量測功能，可量測 5V 以內的電壓值。</li>
+          <li>手機聲控說出「量測電壓」，進入電壓測量功能。</li>
+          <li>AT1 RC37 遙控器使用電池操作，可測試 RC37 遙控器的電池電壓值，確認信號發射穩定。</li>
+          <li>支援 RC37 遙控器 32 位元信號解碼顯示、簡易示波器量測及脈波寬度量測，可測試、監控一般遙控器信號。</li>
+          <li>整合彩燈 WS2812 信號，可測試彩燈。</li>
+          <li>支援 AT1 精華筆記，搭載一堂「AT1 製作技巧學 Arduino」課程。</li>
+        </ol>
+
+        <h4>適合對象與課程</h4>
+        <p>適合高中生學生自主學習計畫、專題製作、Arduino 作品設計、Python 學習體驗，或對聲控技術 DIY、智慧居家控制應用、「聲控我的家」改裝應用感興趣者，也適合用於求職面試代表作品設計及測試工程師延伸實作。可配合 2026 教學目標，增加實作經驗與學習歷程。</p>
+        <p>目前有 4 堂課可以選：VIOS Python 自製聲控工具、遙控車、RGOO 智慧音箱。</p>
+      </div>
+    </article>
     <article class="story-card story-card-project" data-article-slug="ai-assisted-embedded-debugging" data-published-date="2026-08-28">
       <div class="story-body">
         <div class="story-head">
